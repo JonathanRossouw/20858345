@@ -3,6 +3,9 @@
 .Rapp.history
 
 data/
+Questions/Question1/data/
+Questions/Question2/data/
+
 
 # Session Data files
 .RData

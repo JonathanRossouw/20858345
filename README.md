@@ -1,25 +1,17 @@
----
-output:
-  md_document:
-    variant: markdown_github
----
-
 # Description
 
-This is the README for the Financial Econometrics Practical Exam. 
+This is the README for the Financial Econometrics Practical Exam.
 
 This folder was created by running on an R instance:
 
-
-
-```{r, eval = F}
+``` r
 fmxdat::make_project()
 ```
 
-All the folder structure for all questions was made using the following code:
+All the folder structure for all questions was made using the following
+code:
 
-```{r, eval=FALSE}
-
+``` r
 # Question 1
 Texevier::create_template_html(directory = "Questions",
                           template_name = "Question1"
@@ -29,29 +21,44 @@ Texevier::create_template_html(directory = "Questions",
 Texevier::create_template(directory = "Questions",
                           template_name = "Question2"
 )
-
 ```
 
 Source in all functions (This may not be necessary)
 
-```{r}
-
+``` r
 rm(list = ls()) # Clean your environment:
 gc() # garbage collection - It can be useful to call gc after a large object has been removed, as this may prompt R to return memory to the operating system.
+```
+
+    ##          used (Mb) gc trigger (Mb) limit (Mb) max used (Mb)
+    ## Ncells 423743 22.7     877231 46.9         NA   666925 35.7
+    ## Vcells 806034  6.2    8388608 64.0     102400  1823999 14.0
+
+``` r
 library(tidyverse)
+```
+
+    ## ── Attaching packages ─────────────────────────────────────── tidyverse 1.3.1 ──
+
+    ## ✓ ggplot2 3.3.5     ✓ purrr   0.3.4
+    ## ✓ tibble  3.1.4     ✓ dplyr   1.0.7
+    ## ✓ tidyr   1.1.3     ✓ stringr 1.4.0
+    ## ✓ readr   2.0.1     ✓ forcats 0.5.1
+
+    ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+    ## x dplyr::filter() masks stats::filter()
+    ## x dplyr::lag()    masks stats::lag()
+
+``` r
 pacman::p_load(cowplot)
 list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
 ```
 
-
-
 # Question 1
-
 
 ## Yield Spreads
 
-```{r q1_data}
-
+``` r
 # Read in Data
 
 library(tidyverse)
@@ -62,14 +69,11 @@ bonds_10y <- read_rds("data/bonds_10y.rds")
 usdzar <- read_rds("data/usdzar.rds")
 ZA_Infl <- read_rds("data/ZA_Infl.rds")
 IV <- read_rds("data/IV.rds")
-
 ```
 
+-   Compare returns for short term debt to mid and long term debt.
 
-* Compare returns for short term debt to mid and long term debt.
-
-```{r q1_1}
-
+``` r
 pacman::p_load(fmxdat)
 
 # Make data longer, calculate returns, filter to 2020 onwards and calculate mid and long term spreads.
@@ -92,14 +96,13 @@ q1_p1 <- SA_Spreads %>%
     fmxdat::fmx_cols()
 
 fmxdat::finplot(q1_p1, x.date.type = "%Y%m", x.vert = TRUE)
-
 ```
 
+![](README_files/figure-markdown_github/q1_1-1.png)
 
-* Find real rates using inflation.
+-   Find real rates using inflation.
 
-```{r q1_2}
-
+``` r
 pacman::p_load(lubridate)
 
 # Calculate Spreads and Inflation
@@ -140,14 +143,14 @@ q1_p2 <- SA_Spreads_Infl %>%
     fmxdat::fmx_cols()
 
 fmxdat::finplot(q1_p2, x.date.type = "%Y%m", x.vert = TRUE)
-
 ```
 
+![](README_files/figure-markdown_github/q1_2-1.png)
 
-* Compare to USD/ZAR, see if higher exchange rate means less confidence and higher spreads
+-   Compare to USD/ZAR, see if higher exchange rate means less
+    confidence and higher spreads
 
-```{r q1_3}
-
+``` r
 # Show Spreads and Exchange Rate
 
 SA_Spreads_EX <- SA_bonds %>% 
@@ -173,13 +176,13 @@ q1_p3 <- SA_Spreads_EX %>%
     fmxdat::fmx_cols()
 
 fmxdat::finplot(q1_p3, x.date.type = "%Y%m", x.vert = TRUE)
-
 ```
 
-* Compare to International Spreads
+![](README_files/figure-markdown_github/q1_3-1.png)
 
-```{r q1_4}
+-   Compare to International Spreads
 
+``` r
 # Calculate SA Spreads and US, Turkey and Brazil Spreads with SA 3 Month Yields
 
 names_2yr <- c("Brazil_2yr", "US_2yr", "TUR_2yr")
@@ -223,12 +226,11 @@ q1_p4 <- SA_Spreads_Int %>% filter(!Spreads %in% "S_AUS_2Yr") %>%
     fmxdat::fmx_cols()
 
 fmxdat::finplot(q1_p4, x.date.type = "%Y%m", x.vert = TRUE)
-
 ```
 
+![](README_files/figure-markdown_github/q1_4-1.png)
 
-```{r q1_5}
-
+``` r
 # Compare SA Spreads to VIX
 
 SA_Spreads_Int_VIX <- SA_bonds %>% 
@@ -258,27 +260,23 @@ q1_p5 <- SA_Spreads_Int_VIX %>%
 fmxdat::finplot(q1_p5, x.date.type = "%Y%m", x.vert = TRUE)
 ```
 
-
+![](README_files/figure-markdown_github/q1_5-1.png)
 
 # Question 2
 
+-   Load in data
 
-* Load in data
-
-```{r q2_data}
-
+``` r
 # Loading in data
 
 T40 <- read_rds("data/T40.rds")
 RebDays <- read_rds("data/Rebalance_days.rds")
-
 ```
 
+-   Create function to calculate portfolio returns for different sectors
+    and indices for both SWIX and ALSI.
 
-* Create function to calculate portfolio returns for different sectors and indices for both SWIX and ALSI.
-
-
-```{r q1_func}
+``` r
 # Create portfolio return function
 
 # Sector and Index as input
@@ -393,11 +391,9 @@ out <- left_join(df_Portf_J200 %>% rename(J200 = PortfolioReturn),
     pivot_longer(c("J200", "J400"), names_to = "Meth", values_to = "Returns")
 out
 }
-
 ```
 
-```{r q2_comp}
-
+``` r
 # Compare Sectors for ALSI and SWIX
 
 sectors <- T40 %>% pull(Sector) %>% unique()
@@ -426,8 +422,11 @@ q2_p1 <- sectors_cum_ret %>%
         fmxdat::theme_fmx(title.size = ggpts(25))
 
 finplot(q2_p1)
+```
 
+![](README_files/figure-markdown_github/q2_comp-1.png)
 
+``` r
 # Compare indeices for ALSI and SWIX
 
 indices <- T40 %>%  pull(Index_Name) %>% na.omit(.) %>%  unique()
@@ -456,14 +455,31 @@ q2_p2 <- indices_cum_ret %>%
         fmxdat::theme_fmx(title.size = ggpts(25))
 
 finplot(q2_p2)
-
 ```
 
-```{r q2_2}
+![](README_files/figure-markdown_github/q2_comp-2.png)
 
+``` r
 # Stratify the returns by high and low volatility of the UDS ZAR and compare ALSI and SWIX
 usdzar
+```
 
+    ## # A tibble: 8,305 × 3
+    ##    date       Name             Price
+    ##    <date>     <chr>            <dbl>
+    ##  1 1990-01-01 SouthAfrica_Cncy  2.55
+    ##  2 1990-01-02 SouthAfrica_Cncy  2.57
+    ##  3 1990-01-03 SouthAfrica_Cncy  2.58
+    ##  4 1990-01-04 SouthAfrica_Cncy  2.53
+    ##  5 1990-01-05 SouthAfrica_Cncy  2.54
+    ##  6 1990-01-08 SouthAfrica_Cncy  2.53
+    ##  7 1990-01-09 SouthAfrica_Cncy  2.54
+    ##  8 1990-01-10 SouthAfrica_Cncy  2.54
+    ##  9 1990-01-11 SouthAfrica_Cncy  2.54
+    ## 10 1990-01-12 SouthAfrica_Cncy  2.54
+    ## # … with 8,295 more rows
+
+``` r
 zar <-  usdzar  %>% 
   filter(date > ymd(20080101)) %>% 
     mutate(Return = Price/lag(Price) - 1) %>% filter(date > first(date)) %>% 
@@ -530,14 +546,28 @@ perf_lo <- Perf_comparisons(ALSI_SWIX, YMs = Low_Vol, Alias = "Low_Vol")
 
 # Print High Vol
 perf_hi
-# Print Low Low
-perf_lo
-
 ```
 
+    ## # A tibble: 2 × 5
+    ## # Groups:   Tickers [2]
+    ##   Tickers    SD Full_SD Period   Ratio
+    ##   <chr>   <dbl>   <dbl> <chr>    <dbl>
+    ## 1 J200    0.288   0.194 High_Vol  1.48
+    ## 2 J400    0.286   0.194 High_Vol  1.48
 
-```{r q2_3, warning=FALSE}
+``` r
+# Print Low Low
+perf_lo
+```
 
+    ## # A tibble: 2 × 5
+    ## # Groups:   Tickers [2]
+    ##   Tickers    SD Full_SD Period  Ratio
+    ##   <chr>   <dbl>   <dbl> <chr>   <dbl>
+    ## 1 J400    0.154   0.194 Low_Vol 0.793
+    ## 2 J200    0.151   0.194 Low_Vol 0.779
+
+``` r
 # Construct Capped Portfolio and Determine Performance for ALSI
 
 reb_ALSI <- T40 %>% 
@@ -723,9 +753,6 @@ labs(subtitle = "Uncapped Index Calculation for ALSI and SWIX",
 fmxdat::theme_fmx(subtitle.size = ggpts(20))
 
 plot_grid(finplot(q2_p3), finplot(q2_p4), labels = list(title = "Comparing Capped and Uncapped returns of ALSI and SWIX"), label_size = ggpts(30), align = "h")
-
 ```
 
-
-
-
+![](README_files/figure-markdown_github/q2_3-1.png)

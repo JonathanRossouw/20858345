@@ -1,0 +1,260 @@
+---
+title: "Study of SA Mid and Long Term Bond Yield Spreads"
+author: "Jonathan Rossouw"
+date: "4 December 2021"
+# date: "`r Sys.Date()`"
+bibliography: Tex/ref.bib       # Do not edit: Keep this naming convention and location.
+output:
+  pagedown::html_paged:
+    # template: wp_paged.html
+    # css: ['wp.css', 'wp-fonts.css', 'wp-page.css']
+    css: ["Template/default-fonts-Texevier.css", "Template/default-page-Texevier.css", "Template/default-Texevier.css"]
+    csl: Template/harvard-stellenbosch-university.csl # referencing format used.
+    template: ["Template/paged-Texevier.html"]
+
+    toc: true
+    # change to true for a self-contained document, but it'll be a litte slower for Pandoc to render
+    self_contained: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
+pacman::p_load(modelsummary, gt, knitr, kableExtra, tidyverse)
+```
+
+\newpage
+
+# Introduction
+
+The following is a study of the SA mid and long term bond yield spreads. The spreads are compared to each other, inflation, the USD ZAR Exchange rate, a selection of foreign bond yields, and a selection of volatility indices to give the movement in the yields context.
+
+```{r}
+
+# Read in Data
+
+library(tidyverse)
+SA_bonds <- read_rds("data/SA_Bonds.rds")
+BE_Infl <- read_rds("data/BE_Infl.rds")
+bonds_2y <- read_rds("data/bonds_2y.rds")
+bonds_10y <- read_rds("data/bonds_10y.rds")
+usdzar <- read_rds("data/usdzar.rds")
+ZA_Infl <- read_rds("data/ZA_Infl.rds")
+IV <- read_rds("data/IV.rds")
+
+```
+
+
+## What are the yields
+
+
+```{r q1_1}
+
+pacman::p_load(fmxdat)
+
+# Make data longer, calculate returns, filter to 2020 onwards and calculate mid and long term spreads.
+
+SA_Spreads <- SA_bonds %>% 
+    arrange(date) %>% 
+    group_by(date) %>% 
+    mutate(S_2Yr = ZA_2Yr-SA_3M, S_10Yr = ZA_10Yr-SA_3M) %>% 
+    ungroup() %>% 
+    pivot_longer(c("S_2Yr", "S_10Yr"), names_to = "Spreads", values_to = "Rates") %>% 
+    filter(date >= as.Date("2020/01/01"))
+    
+# Plot the spreads
+
+q1_p1 <- SA_Spreads %>% 
+    ggplot() +
+    geom_line(aes(date, Rates, colour = Spreads), alpha = 0.8) +
+    labs(title = "Mid and Long Term SA Spreads", y = "Spreads (Yields)", x ="") +
+    fmxdat::theme_fmx() + 
+    fmxdat::fmx_cols()
+
+fmxdat::finplot(q1_p1, x.date.type = "%Y%m", x.vert = TRUE)
+
+```
+
+
+Clearly, there has been a sharp increase in the mid and long term spreads since the onset of COVID-19. While the mid spread has come down slightly since its high in late 2020, the long spread remains high.
+
+
+## Inflation
+
+```{r q1_2}
+
+pacman::p_load(lubridate)
+
+# Calculate Spreads and Inflation
+# Take end of Month Yields
+
+SA_Spreads_Infl <- left_join(SA_bonds %>% filter(date >= as.Date("2020/01/01")) %>% 
+    arrange(date) %>% 
+    group_by(date) %>% 
+    mutate(S_2Yr = ZA_2Yr-SA_3M, S_10Yr = ZA_10Yr-SA_3M), 
+    BE_Infl %>% rename(BE_Inf = Price) %>% 
+        select(-Name) %>%  
+        filter(date >= as.Date("2020/01/01")), by = "date") %>% 
+    mutate(YM = format(date, "%Y%m")) %>% 
+    group_by(YM) %>% 
+    filter(date == last(date)) %>% 
+    select(-date) %>% 
+    left_join(.,
+    ZA_Infl %>% 
+        arrange(date) %>% 
+        filter(date >= as.Date("2020/01/01")) %>% 
+        rename(Inflation = Price) %>% 
+        select(-Name) %>% 
+        mutate(YM = format(date, "%Y%m")) %>% 
+        select(-date),
+    by = "YM") %>% 
+    ungroup() %>% 
+    pivot_longer(c("S_2Yr", "S_10Yr", "BE_Inf", "Inflation"), names_to = "Spreads", values_to = "Rates") %>% 
+    mutate(date = ym(YM))
+
+
+# Plot the spreads and inflation
+
+q1_p2 <- SA_Spreads_Infl %>% 
+    ggplot() +
+    geom_line(aes(date, Rates, colour = Spreads), alpha = 0.8) +
+    labs(title = "Mid and Long Term SA Spreads", y = "Spreads (Yields)", x ="", subtitle = "Including Inflation and Break-Even 10 Year Yield (End of Month)") +
+    fmxdat::theme_fmx(title.size = ggpts(25), subtitle.size = ggpts(20)) + 
+    fmxdat::fmx_cols()
+
+fmxdat::finplot(q1_p2, x.date.type = "%Y%m", x.vert = TRUE)
+
+```
+
+
+When including inflation on a monthly basis, inflation had been above the long spread before the pandemic but that has since reversed. Inflation remains below the long yield. The Break-Even inflation and long yield are tracking closely.
+
+
+## USD ZAR
+
+```{r q1_3}
+
+# Show Spreads and Exchange Rate
+
+SA_Spreads_EX <- SA_bonds %>% 
+    arrange(date) %>% 
+    group_by(date) %>% 
+    mutate(S_2Yr = ZA_2Yr-SA_3M, S_10Yr = ZA_10Yr-SA_3M) %>% 
+    ungroup() %>% 
+    filter(date >= as.Date("2020/01/01")) %>% 
+    left_join(., usdzar %>% 
+                  arrange(date) %>% 
+                  filter(date >= as.Date("2020/01/01")) %>% 
+                  rename(EX = Price)%>% 
+                  select(-Name), by = "date") %>% 
+    pivot_longer(c("S_2Yr", "S_10Yr", "EX"), names_to = "Spreads", values_to = "Rates") 
+
+# Plot the spreads
+
+q1_p3 <- SA_Spreads_EX %>% 
+    ggplot() +
+    geom_line(aes(date, Rates, colour = Spreads), alpha = 0.8) +
+    labs(title = "Mid and Long Term SA Spreads", y = "Spreads (Yields)", x ="", subtitle = "Including USD/ZAR Exchange Rate") +
+    fmxdat::theme_fmx(title.size = ggpts(25), subtitle.size = ggpts(20)) + 
+    fmxdat::fmx_cols()
+
+fmxdat::finplot(q1_p3, x.date.type = "%Y%m", x.vert = TRUE)
+
+```
+
+The initial run to safety following the onset of the pandemic saw a large depreciation in the Rand to USD. The spreads followed this pattern. Subsequently, while the Rand has appreciated, the spreads have remained high.
+
+
+## Other Yields
+
+```{r q1_4}
+
+# Calculate SA Spreads and US, Turkey and Brazil Spreads with SA 3 Month Yields
+
+names_2yr <- c("Brazil_2yr", "US_2yr", "TUR_2yr")
+names_10yr <- c("Brazil_10Yr", "US_10Yr", "TUR_10Yr")
+
+
+SA_Spreads_Int <- SA_bonds %>% 
+    arrange(date) %>% 
+    group_by(date) %>% 
+    ungroup() %>% 
+    filter(date >= as.Date("2020/01/01")) %>% 
+    left_join(., bonds_2y %>% 
+                  arrange(date) %>% 
+                  filter(date >= as.Date("2020/01/01")) %>% 
+                  filter(Name %in% names_2yr) %>% 
+                  spread(Name, Bond_2Yr), by = "date") %>% 
+    left_join(., bonds_10y %>% 
+                  arrange(date) %>% 
+                  filter(date >= as.Date("2020/01/01")) %>% 
+                  filter(Name %in% names_10yr) %>% 
+                  spread(Name, Bond_10Yr), by = "date") %>% 
+    group_by(date) %>% 
+    mutate(S_2Yr = ZA_2Yr-SA_3M, S_10Yr = ZA_10Yr-SA_3M, 
+           S_US_2Yr = US_2yr-SA_3M, S_US_10Yr = US_10Yr-SA_3M, 
+           S_TUR_10Yr = TUR_10Yr-SA_3M, S_TUR_2Yr = TUR_2yr-SA_3M,
+           S_BRA_10Yr = Brazil_10Yr-SA_3M, S_BRA_2Yr = Brazil_2yr-SA_3M) %>% 
+    ungroup() %>% 
+    pivot_longer(c("S_2Yr", "S_10Yr", 
+                   "S_US_2Yr", "S_US_10Yr", 
+                   "S_TUR_10Yr", "S_TUR_2Yr", 
+                   "S_BRA_10Yr", "S_BRA_2Yr"), 
+                 names_to = "Spreads", values_to = "Rates") 
+
+# Plot the spreads
+
+q1_p4 <- SA_Spreads_Int %>% filter(!Spreads %in% "S_AUS_2Yr") %>% 
+    ggplot() +
+    geom_line(aes(date, Rates, colour = Spreads), alpha = 0.8) +
+    labs(title = "Mid and Long Term SA Spreads", y = "Spreads (Yields)", x ="", subtitle = "Including US, Turkey and Brazil Mid and Long Spreads to SA 3 Month Yields") +
+    fmxdat::theme_fmx(title.size = ggpts(25), subtitle.size = ggpts(18), legend.size = ggpts(15)) + 
+    fmxdat::fmx_cols()
+
+fmxdat::finplot(q1_p4, x.date.type = "%Y%m", x.vert = TRUE)
+
+```
+
+Comparing the SA yield to the US, Turkish and Brazilian mid and long spreads to the SA 2 month yield, SA's spreads sit in the mid range of the series. The Turkish yield is extremely high due to the ongoing currency crisis. The other spreads have all stabilised.
+
+
+## Volatility Indices
+
+```{r q1_5}
+
+# Compare SA Spreads to VIX
+
+SA_Spreads_Int_VIX <- SA_bonds %>% 
+    arrange(date) %>% 
+    group_by(date) %>% 
+    ungroup() %>% 
+    filter(date >= as.Date("2020/01/01")) %>% 
+    left_join(., IV %>% filter(date >= as.Date("2020/01/01")) %>% 
+    spread(Name, Price), by = "date") %>% 
+    mutate(S_2Yr = ZA_2Yr-SA_3M, S_10Yr = ZA_10Yr-SA_3M) %>% 
+    pivot_longer(c("S_2Yr", "S_10Yr"), names_to = "Spreads", values_to = "Rates") %>% 
+    pivot_longer(c("V2X", "VIX", "VXEEM"), names_to = "Vol", values_to = "Index")
+
+# PLot Spreads and Indices on Seperate Axis
+
+q1_p5 <- SA_Spreads_Int_VIX %>% 
+    ggplot() +
+    geom_line(aes(date, Rates, colour = Spreads), alpha = 0.8) +
+    geom_line(aes(date, Index/20, colour = Vol), alpha = 0.8) +
+    ggplot2::scale_y_continuous(
+    name = "Spreads (Yields)",
+    sec.axis = sec_axis(~.*20, name="Vol Index")) +
+     labs(title = "Mid and Long Term SA Spreads", x ="", subtitle = "Including VIX, V2X and VXEEM Volatility Indices") +
+    fmxdat::theme_fmx(title.size = ggpts(25), subtitle.size = ggpts(18), legend.size = ggpts(15)) + 
+    fmxdat::fmx_cols()
+
+fmxdat::finplot(q1_p5, x.date.type = "%Y%m", x.vert = TRUE)
+```
+
+The outbreak of the pandemic was a major source of volality to the markets. This conincided with the sharp increase in the mid and long SA bond spreads. Since the initial scare, the volaility indecies have lower in volatility along with the decreased mid spread. However, the long spread remains high.
+
+# Conclusion
+
+The outbreak of the pandemic created high levels of uncertainty and panic in the markets. This translated into an increase in SA mid and long bond spreads. While the mid spread has lower over the past 2 years, the high spread has remained at elevated levels. This is an indication of a lack of long term faith in the SA governments ability to stabilize its finances and obligation to repay debt.
+
+
+

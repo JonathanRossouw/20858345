@@ -1,0 +1,493 @@
+---
+# IMPORTANT: Change settings here, but DO NOT change the spacing.
+# Remove comments and add values where applicable.
+# The descriptions below should be self-explanatory
+
+title: "Question 2"
+#subtitle: "This will appear as Right Header"
+
+documentclass: "elsarticle"
+
+# --------- Thesis title (Optional - set to FALSE by default).
+# You can move the details below around as you please.
+Thesis_FP: FALSE
+# Entry1: "An unbelievable study with a title spanning multiple lines."
+# Entry2: "\\textbf{Nico Katzke}" # textbf for bold
+# Entry3: "A thesis submitted toward the degree of Doctor of Philosophy"
+# Uni_Logo: Tex/Logo.png # Place a logo in the indicated location (from your root, e.g. defaults to ~/Tex/Logo.png) and uncomment this line. Leave uncommented for no image
+# Logo_width: 0.3 # If using a logo - use this to set width (size) of image
+# Entry4: "Under the supervision of: \\vfill Prof. Joe Smith and Dr. Frank Smith"
+# Entry5: "Stellenbosch University"
+# Entry6: April 2020
+# Entry7:
+# Entry8:
+
+# --------- Front Page
+# Comment: ----- Follow this pattern for up to 5 authors
+AddTitle: TRUE # Use FALSE when submitting to peer reviewed platform. This will remove author names.
+Author1: "Jonathan Rossouw"  # First Author - note the thanks message displayed as an italic footnote of first page.
+#Ref1: "Prescient Securities, Cape Town, South Africa" # First Author's Affiliation
+Email1: "20858345\\@sun.ac.za" # First Author's Email address
+
+#Author2: "John Smith"
+#Ref2: "Some other Institution, Cape Town, South Africa"
+#Email2: "John\\@gmail.com"
+#CommonAffiliation_12: TRUE # If Author 1 and 2 have a common affiliation. Works with _13, _23, etc.
+
+#Author3: "John Doe"
+#Email3: "Joe\\@gmail.com"
+
+#CorrespAuthor_1: TRUE  # If corresponding author is author 3, e.g., use CorrespAuthor_3: TRUE
+
+# Comment out below to remove both. JEL Codes only given if keywords also given.
+#keywords: "Multivariate GARCH \\sep Kalman Filter \\sep Copula" # Use \\sep to separate
+#JELCodes: "L250 \\sep L100"
+
+# ----- Manage headers and footers:
+#BottomLFooter: $Title$
+#BottomCFooter:
+#TopLHeader: \leftmark # Adds section name at topleft. Remove comment to add it.
+#BottomRFooter: "\\footnotesize Page \\thepage" # Add a '#' before this line to remove footer.
+#addtoprule: TRUE
+#addfootrule: TRUE               # Use if footers added. Add '#' to remove line.
+
+# --------- page margins:
+margin: 2.3 # Sides
+bottom: 2 # bottom
+top: 2.5 # Top
+HardSet_layout: TRUE # Hard-set the spacing of words in your document. This will stop LaTeX squashing text to fit on pages, e.g.
+# This is done by hard-setting the spacing dimensions. Set to FALSE if you want LaTeX to optimize this for your paper.
+
+# --------- Line numbers
+linenumbers: FALSE # Used when submitting to journal
+
+# ---------- References settings:
+# You can download cls format here: https://www.zotero.org/ - simply search for your institution. You can also edit and save cls formats here: https://editor.citationstyles.org/about/
+# Hit download, store it in Tex/ folder, and change reference below - easy.
+bibliography: Tex/ref.bib       # Do not edit: Keep this naming convention and location.
+csl: Tex/harvard-stellenbosch-university.csl # referencing format used.
+# By default, the bibliography only displays the cited references. If you want to change this, you can comment out one of the following:
+#nocite: '@*' # Add all items in bibliography, whether cited or not
+# nocite: |  # add specific references that aren't cited
+#  @grinold2000
+#  @Someoneelse2010
+
+# ---------- General:
+RemovePreprintSubmittedTo: TRUE  # Removes the 'preprint submitted to...' at bottom of titlepage
+#Journal: "Journal of Finance"   # Journal that the paper will be submitting to, if RemovePreprintSubmittedTo is set to TRUE.
+toc: FALSE                       # Add a table of contents
+numbersections: TRUE             # Should sections (and thus figures and tables) be numbered?
+fontsize: 11pt                  # Set fontsize
+linestretch: 1.2                # Set distance between lines.
+link-citations: TRUE            # This creates dynamic links to the papers in reference list.
+
+### Adding additional latex packages:
+# header-includes:
+#    - \usepackage{colortbl} # Add additional packages here.
+
+output:
+  pdf_document:
+    keep_tex: TRUE
+    template: Tex/TexDefault.txt
+    fig_width: 3.5 # Adjust default figure sizes. This can also be done in the chunks of the text.
+    fig_height: 3.5
+abstract: |
+  This paper investigates the performance of the ALSI and SWIX indices. 
+---
+
+<!-- First: Set your default preferences for chunk options: -->
+
+<!-- If you want a chunk's code to be printed, set echo = TRUE. message = FALSE stops R printing ugly package loading details in your final paper too. I also suggest setting warning = FALSE and checking for warnings in R, else you might find ugly warnings in your paper. -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = 6, fig.height = 5, fig.pos="H", fig.pos = 'H')
+# Note: Include = FALSE implies the code is executed, but not printed in your pdf.
+# warning and message = FALSE implies ugly messages and warnings are removed from your pdf.
+# These should be picked up when you execute the command chunks (code sections below) in your rmd, not printed in your paper!
+
+# Lets load in example data, and see how this can be stored and later called from your 'data' folder.
+if(!require("tidyverse")) install.packages("tidyverse")
+library(tidyverse)
+pacman::p_load(fmxdat, lubridate, PerformanceAnalytics, cowplot)
+list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
+
+```
+
+
+<!-- ############################## -->
+<!-- # Start Writing here: -->
+<!-- ############################## -->
+
+# Introduction \label{Introduction}
+
+This document analyses the performance of the ALSI and SWIX indices since 2008. They are analysed along the lines of general performance and performance during volatility. Furthermore, the effects of including capping on the weights is investigated.
+
+```{r q2_data}
+pacman::p_load(tbl2xts, PerformanceAnalytics)
+
+# Loading in data
+
+T40 <- read_rds("data/T40.rds")
+RebDays <- read_rds("data/Rebalance_days.rds")
+usdzar <- read_rds("data/usdzar.rds")
+
+```
+
+## Sector and Index Analysis
+
+Compare the performance for the different sector for the ALSI and SWIX. J200 refers to ALSI and J400 to SWIX. Both the ALSI and SWIX indices track each other closely. Clearly industrials were the best performing sector having grow by 1400\%. Recently resources has begun to output perform financials.
+
+```{r q2_comp}
+
+# Compare Sectors for ALSI and SWIX
+
+sectors <- T40 %>% pull(Sector) %>% unique()
+sector_ret <- list()
+
+for(i in 1:length(sectors)){
+    # Loop through sectors and calculate returns and cumulative returns
+    sector_ret[[i]] <- port_ret_func(T40, sector = sectors[i]) %>% group_by(Meth) %>% 
+    mutate(cumreturn_Rand = (cumprod(1 + 
+    Returns))) %>% # Start at 1
+mutate(cumreturn_Rand = cumreturn_Rand/first(cumreturn_Rand)) %>% 
+    mutate(Sector = sectors[i])
+}
+# Rename tibbles
+names(sector_ret) <- sectors
+# Combine Dataframes
+
+sectors_cum_ret <- rbind(sector_ret[[1]],
+                             sector_ret[[2]], 
+                             sector_ret[[3]]) %>% arrange(date)
+    
+q2_p1 <- sectors_cum_ret %>% 
+        ggplot() +
+        geom_line(aes(date, cumreturn_Rand, colour = Meth), alpha = 0.8) + facet_wrap(~Sector) + fmxdat::fmx_cols() + 
+        labs(title = "Cumulative Returns per Sector for ALSI and SWIX", y = "Cumulative Returns", x = "") +
+        fmxdat::theme_fmx(title.size = ggpts(25))
+
+finplot(q2_p1)
+```
+
+When comparing the returns of the different cap shares, ALSI and SWIX track closely with ALSI potentially slightly ahead. The Small Caps index is a new index thus does not have the small historic data. The large caps substantially outperformed the mid caps.
+
+```{r indices}
+# Compare indices for ALSI and SWIX
+
+indices <- T40 %>%  pull(Index_Name) %>% na.omit(.) %>%  unique()
+indices_ret <- list()
+
+for(i in 1:length(indices)){
+    # Loop through sectors and calculate returns and cumulative returns
+    indices_ret[[i]] <- port_ret_func(T40,index = indices[i]) %>% group_by(Meth) %>% 
+    mutate(cumreturn_Rand = (cumprod(1 + 
+    Returns))) %>% # Start at 1
+mutate(cumreturn_Rand = cumreturn_Rand/first(cumreturn_Rand)) %>% 
+    mutate(Index = indices[i])
+}
+# Rename tibbles
+names(indices_ret) <- indices
+# Combine Dataframes
+
+indices_cum_ret <- rbind(indices_ret[[1]],
+                             indices_ret[[2]], 
+                             indices_ret[[3]]) %>% arrange(date)
+    
+q2_p2 <- indices_cum_ret %>% 
+        ggplot() +
+        geom_line(aes(date, cumreturn_Rand, colour = Meth), alpha = 0.8) + facet_wrap(~Index) + fmxdat::fmx_cols() + 
+        labs(title = "Cumulative Returns per Index for ALSI and SWIX", y = "Cumulative Returns", x = "") +
+        fmxdat::theme_fmx(title.size = ggpts(25))
+
+finplot(q2_p2)
+
+```
+
+
+## Volatility Analysis
+
+The performance during low and high USD ZAR volatility is very similar. The SWIX is very slightly more risky.
+
+
+```{r q2_2}
+
+# Stratify the returns by high and low volatility of the UDS ZAR and compare ALSI and SWIX
+
+zar <-  usdzar  %>% 
+  filter(date > ymd(20080101)) %>% 
+    mutate(Return = Price/lag(Price) - 1) %>% filter(date > first(date)) %>% 
+    select(-c(Price, Name))
+
+ZARSD <- 
+  
+zar %>% 
+  
+  mutate(YearMonth = format(date, "%Y%B")) %>% 
+  
+  group_by(YearMonth) %>% summarise(SD = sd(Return)*sqrt(52)) %>% 
+  
+  # Top Decile Quantile overall (highly volatile month for ZAR:
+  mutate(TopQtile = quantile(SD, 0.8),
+         
+         BotQtile = quantile(SD, 0.2))
+
+Hi_Vol <- ZARSD %>% filter(SD > TopQtile) %>% pull(YearMonth)
+
+Low_Vol <- ZARSD %>% filter(SD < BotQtile) %>% pull(YearMonth)
+
+# Create generic function to compare performance:
+
+Perf_comparisons <- function(Idxs, YMs, Alias){
+  # For stepping through uncomment:
+  # YMs <- Hi_Vol
+  Unconditional_SD <- 
+    
+  Idxs %>% 
+    
+    group_by(Tickers) %>% 
+    
+    mutate(Full_SD = sd(Return) * sqrt(252)) %>% 
+    
+    filter(YearMonth %in% YMs) %>% 
+    
+    summarise(SD = sd(Return) * sqrt(252), across(.cols = starts_with("Full"), .fns = max)) %>% 
+    
+    arrange(desc(SD)) %>% mutate(Period = Alias) %>% 
+    
+    group_by(Tickers) %>% 
+    
+    mutate(Ratio = SD / Full_SD)
+    
+    Unconditional_SD
+  
+}
+
+ALSI_SWIX <- port_ret_func(T40)
+# Prepare and Winzorise Returns
+ALSI_SWIX <- ALSI_SWIX %>% 
+    group_by(Meth) %>% 
+    mutate(YearMonth = format(date, "%Y%B")) %>% 
+    rename(Tickers = Meth, Return = Returns) %>% 
+    group_by(Tickers) %>% 
+    mutate(Top = quantile(Return, 0.99), Bot = quantile(Return, 0.01)) %>% 
+    mutate(Return = ifelse(Return > Top, Top, 
+                         ifelse(Return < Bot, Bot, Return))) %>% ungroup()
+
+perf_hi <- Perf_comparisons(ALSI_SWIX, YMs = Hi_Vol, Alias = "High_Vol")
+
+perf_lo <- Perf_comparisons(ALSI_SWIX, YMs = Low_Vol, Alias = "Low_Vol")
+
+kableExtra::kable(perf_hi, format = "latex", digits = 5, caption = "Performance of ALSI and SWIX during high USD ZAR Volatility")
+
+kableExtra::kable(perf_lo, format = "latex", digits = 5, caption = "Performance of ALSI and SWIX during low USD ZAR Volatility")
+
+```
+
+
+## Capped compared to Uncapped Performance
+
+From the figure, it can be seen that the uncapped performance of the ALSI and SWIX indices outperforms the capped performance. The ALSI is capped at 10\% and the SWIX at 6\%
+
+```{r q2_3, warning=FALSE}
+
+# Construct Capped Portfolio and Determine Performance for ALSI
+
+reb_ALSI <- T40 %>% 
+filter(date %in% RebDays$date) %>% 
+# Now we have to distinguish rebalances - to create something
+# to group by:
+mutate(RebalanceTime = format(date, "%Y%B")) %>% 
+    select(date, Tickers, Return, J200, RebalanceTime) %>% 
+    rename(weight = J200) %>% 
+    mutate(weight = coalesce(weight , 0))
+
+## Uncomment for stepping through function:
+# df_Cons <- rebalance_col %>% filter(date == first(date))
+# W_Cap = 0.08
+
+Proportional_Cap_Foo <- function(df_Cons, W_Cap = 0.08){
+  
+  # Let's require a specific form from the user... Alerting when it does not adhere this form
+  if( !"weight" %in% names(df_Cons)) stop("... for Calc capping to work, provide weight column called 'weight'")
+  
+  if( !"date" %in% names(df_Cons)) stop("... for Calc capping to work, provide date column called 'date'")
+  
+  if( !"Tickers" %in% names(df_Cons)) stop("... for Calc capping to work, provide id column called 'Tickers'")
+
+  # First identify the cap breachers...
+  Breachers <- 
+    df_Cons %>% filter(weight > W_Cap) %>% pull(Tickers)
+  
+  # Now keep track of breachers, and add to it to ensure they remain at 10%:
+  if(length(Breachers) > 0) {
+    
+    while( df_Cons %>% filter(weight > W_Cap) %>% nrow() > 0 ) {
+      
+      
+      df_Cons <-
+        
+        bind_rows(
+          
+          df_Cons %>% filter(Tickers %in% Breachers) %>% mutate(weight = W_Cap),
+          
+          df_Cons %>% filter(!Tickers %in% Breachers) %>% 
+            mutate(weight = (weight / sum(weight, na.rm=T)) * (1-length(Breachers)*W_Cap) )
+          
+        )
+      
+      Breachers <- c(Breachers, df_Cons %>% filter(weight > W_Cap) %>% pull(Tickers))
+      
+    }
+
+    if( sum(df_Cons$weight, na.rm=T) > 1.1 | sum(df_Cons$weight, na.rm=T) < 0.9 | max(df_Cons$weight, na.rm = T) > W_Cap) {
+      
+      stop( glue::glue("For the Generic weight trimming function used: the weight trimming causes non unit 
+      summation of weights for date: {unique(df_Cons$date)}...\n
+      The restriction could be too low or some dates have extreme concentrations...") )
+      
+    }
+    
+  } else {
+    
+  }
+  
+  df_Cons
+  
+  }
+  
+# Apply Proportional_Cap_Foo to ALSI to get capped return for cap of 10%
+Capped_df <- 
+reb_ALSI %>% 
+group_split(RebalanceTime) %>% 
+map_df(~Proportional_Cap_Foo(., W_Cap = 0.1) ) %>% select(-RebalanceTime)
+ 
+ALSI_wts <- Capped_df %>% tbl_xts(cols_to_xts = weight, spread_by = Tickers)
+
+ALSI_rts <- T40 %>% 
+filter(Tickers %in% unique(Capped_df$Tickers)) %>% 
+tbl_xts(cols_to_xts = Return, spread_by = Tickers)
+
+ALSI_wts[is.na(ALSI_wts)] <- 0
+
+ALSI_rts[is.na(ALSI_rts)] <- 0
+
+ALSI_capped <- rmsfuns::Safe_Return.portfolio(R = ALSI_rts, weights = ALSI_wts, 
+    lag_weights = T) %>% 
+xts_tbl() %>% 
+rename(ALSI = portfolio.returns)
+
+# Construct Capped Portfolio and Determine Performance for SWIX
+
+reb_SWIX <- T40 %>% 
+filter(date %in% RebDays$date) %>% 
+mutate(RebalanceTime = format(date, "%Y%B")) %>% 
+    select(date, Tickers, Return, J400, RebalanceTime) %>% 
+    rename(weight = J400) %>% 
+    mutate(weight = coalesce(weight , 0))
+  
+# Apply Proportional_Cap_Foo to ALSI to get capped return for cap of 6%
+Capped_df <- 
+reb_SWIX %>% 
+group_split(RebalanceTime) %>% 
+map_df(~Proportional_Cap_Foo(., W_Cap = 0.06) ) %>% select(-RebalanceTime)
+ 
+SWIX_wts <- Capped_df %>% tbl_xts(cols_to_xts = weight, spread_by = Tickers)
+
+SWIX_rts <- T40 %>% 
+filter(Tickers %in% unique(Capped_df$Tickers)) %>% 
+tbl_xts(cols_to_xts = Return, spread_by = Tickers)
+
+SWIX_wts[is.na(SWIX_wts)] <- 0
+
+SWIX_rts[is.na(SWIX_rts)] <- 0
+
+SWIX_capped <- rmsfuns::Safe_Return.portfolio(R = SWIX_rts, weights = SWIX_wts, 
+    lag_weights = T) %>% 
+xts_tbl() %>% 
+rename(SWIX = portfolio.returns)
+
+
+# Combine and Plot Performance
+
+capped_indices <- left_join(ALSI_capped, SWIX_capped, by = "date") %>% 
+    pivot_longer(c("ALSI", "SWIX"), names_to = "Meth", values_to = "returns")
+
+# Calculate Uncapped Return for ALSI
+ALSI_wts <- T40 %>% 
+filter(date %in% RebDays$date) %>% 
+mutate(RebalanceTime = format(date, "%Y%B")) %>% 
+    rename(weight = J200) %>% 
+    mutate(weight = coalesce(weight , 0)) %>% 
+    select(date, Tickers, Return, weight, RebalanceTime) %>% 
+     tbl_xts(cols_to_xts = weight, spread_by = Tickers)
+
+ALSI_wts[is.na(ALSI_wts)] <- 0
+
+ALSI_rts[is.na(ALSI_rts)] <- 0
+
+ALSI_capped <- rmsfuns::Safe_Return.portfolio(R = ALSI_rts, weights = ALSI_wts, 
+    lag_weights = T) %>% 
+xts_tbl() %>% 
+rename(ALSI = portfolio.returns)
+
+# Calculate Uncapped Return for SWIX
+ 
+SWIX_wts <- T40 %>% 
+filter(date %in% RebDays$date) %>% 
+mutate(RebalanceTime = format(date, "%Y%B")) %>% 
+    rename(weight = J400) %>% 
+    mutate(weight = coalesce(weight , 0)) %>% 
+    select(date, Tickers, Return, weight, RebalanceTime) %>% 
+     tbl_xts(cols_to_xts = weight, spread_by = Tickers)
+
+SWIX_wts[is.na(SWIX_wts)] <- 0
+
+SWIX_rts[is.na(SWIX_rts)] <- 0
+
+SWIX_capped <- rmsfuns::Safe_Return.portfolio(R = SWIX_rts, weights = SWIX_wts, 
+    lag_weights = T) %>% 
+xts_tbl() %>% 
+rename(SWIX = portfolio.returns)
+
+# Combine and Plot
+
+ALSI_SWIX <- left_join(ALSI_capped, SWIX_capped, by = "date") %>% 
+    pivot_longer(c("ALSI", "SWIX"), names_to = "Meth", values_to = "Returns")
+
+q2_p3 <- capped_indices %>% 
+    group_by(Meth) %>%
+    mutate(Idx = cumprod(1 + returns)) %>% 
+ggplot() + 
+geom_line(aes(date, Idx, colour = Meth), alpha = 0.8) + 
+labs(subtitle = "ALSI capped at 10% and SWIX at 6%", 
+    x = "", y = "Cumulative Return") + 
+    fmx_cols() + 
+fmxdat::theme_fmx(subtitle.size = ggpts(20))
+
+q2_p4 <- ALSI_SWIX %>% 
+    group_by(Meth) %>%
+    mutate(Idx = cumprod(1 + Returns)) %>% 
+ggplot() + 
+geom_line(aes(date, Idx, colour = Meth), alpha = 0.8) + 
+labs(subtitle = "Uncapped Index Calculation for ALSI and SWIX", 
+    x = "", y = "Cumulative Return") + 
+    fmx_cols() + 
+fmxdat::theme_fmx(subtitle.size = ggpts(20))
+
+plot_grid(finplot(q2_p3), finplot(q2_p4), labels = list(title = "Comparing Capped and Uncapped returns of ALSI and SWIX"), label_size = ggpts(30), align = "h")
+
+```
+
+
+# Conclusion \label{Conclusion}
+
+From the results, the ALSI and SWIX are very similar in terms of performance. However, the ALSI offers slightly less volality and greater performance.
+
+
+\newpage
+
+# References {-}
+
+<div id="refs"></div>
+
+
