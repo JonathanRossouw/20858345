@@ -1142,10 +1142,10 @@ finplot(q4_p2)
 ```{r q4_5}
 # Stratify for high carry trade periods and check ZAR Returns
 zar_ret <- cncy %>% filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% filter(Name %in% "SouthAfrica_Cncy") %>% 
-    mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date)
+    mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > dplyr::first(date)) %>% rename(Date = date)
 
 # Find high carry trade periods
-carry_dat <- cncy_Carry %>% filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date) 
+carry_dat <- cncy_Carry %>% filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > dplyr::first(date)) %>% rename(Date = date) 
 
 df_carry <- carry_dat %>% 
   mutate(YearMonth = format(Date, "%Y%B")) %>% 
@@ -1156,7 +1156,7 @@ Hi_carry <- df_carry %>% filter(dlogret > TopQtile) %>% pull(YearMonth)
 
 # Find low value periods
 value_dat <- cncy_value %>% 
-    filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date) 
+    filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > dplyr::first(date)) %>% rename(Date = date) 
 
 
 df_value <- value_dat %>% 
@@ -1169,7 +1169,7 @@ Low_value <- df_value %>% filter(dlogret < BotQtile) %>% pull(YearMonth)
 # Find Strong Dollar periods
 
 basket_dat <- bbdxy %>% 
-    filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date) 
+    filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > dplyr::first(date)) %>% rename(Date = date) 
 
 
 df_basket <- basket_dat %>% 
@@ -1183,7 +1183,7 @@ High_Basket <- df_basket %>% filter(dlogret > TopQtile) %>% pull(YearMonth)
 
 df_zar_carry <- zar_ret %>% 
     mutate(YearMonth = format(Date, "%Y%B")) %>% 
-    filter(YearMonth %in% Hi_Ret) %>% ungroup() %>% 
+    filter(YearMonth %in% Hi_carry) %>% ungroup() %>% 
     summarise(Mean_Ret = mean(dlogret)) %>% 
     mutate(Type = "Carry-Trade")
 
