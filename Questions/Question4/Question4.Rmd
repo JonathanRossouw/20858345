@@ -1,0 +1,274 @@
+---
+# IMPORTANT: Change settings here, but DO NOT change the spacing.
+# Remove comments and add values where applicable.
+# The descriptions below should be self-explanatory
+
+title: "Analysis of ZAR Volatility and Performance"
+#subtitle: "This will appear as Right Header"
+
+documentclass: "elsarticle"
+
+# --------- Thesis title (Optional - set to FALSE by default).
+# You can move the details below around as you please.
+Thesis_FP: FALSE
+# Entry1: "An unbelievable study with a title spanning multiple lines."
+# Entry2: "\\textbf{Nico Katzke}" # textbf for bold
+# Entry3: "A thesis submitted toward the degree of Doctor of Philosophy"
+# Uni_Logo: Tex/Logo.png # Place a logo in the indicated location (from your root, e.g. defaults to ~/Tex/Logo.png) and uncomment this line. Leave uncommented for no image
+# Logo_width: 0.3 # If using a logo - use this to set width (size) of image
+# Entry4: "Under the supervision of: \\vfill Prof. Joe Smith and Dr. Frank Smith"
+# Entry5: "Stellenbosch University"
+# Entry6: April 2020
+# Entry7:
+# Entry8:
+
+# --------- Front Page
+# Comment: ----- Follow this pattern for up to 5 authors
+AddTitle: TRUE # Use FALSE when submitting to peer reviewed platform. This will remove author names.
+Author1: "Jonathan Rossouw"  # First Author - note the thanks message displayed as an italic footnote of first page.
+#Ref1: "Prescient Securities, Cape Town, South Africa" # First Author's Affiliation
+Email1: "20858345\\@sun.ac.za" # First Author's Email address
+
+# ----- Manage headers and footers:
+#BottomLFooter: $Title$
+#BottomCFooter:
+#TopLHeader: \leftmark # Adds section name at topleft. Remove comment to add it.
+#BottomRFooter: "\\footnotesize Page \\thepage" # Add a '#' before this line to remove footer.
+#addtoprule: TRUE
+#addfootrule: TRUE               # Use if footers added. Add '#' to remove line.
+
+# --------- page margins:
+margin: 2.3 # Sides
+bottom: 2 # bottom
+top: 2.5 # Top
+HardSet_layout: TRUE # Hard-set the spacing of words in your document. This will stop LaTeX squashing text to fit on pages, e.g.
+# This is done by hard-setting the spacing dimensions. Set to FALSE if you want LaTeX to optimize this for your paper.
+
+# --------- Line numbers
+linenumbers: FALSE # Used when submitting to journal
+
+# ---------- References settings:
+# You can download cls format here: https://www.zotero.org/ - simply search for your institution. You can also edit and save cls formats here: https://editor.citationstyles.org/about/
+# Hit download, store it in Tex/ folder, and change reference below - easy.
+bibliography: Tex/ref.bib       # Do not edit: Keep this naming convention and location.
+csl: Tex/harvard-stellenbosch-university.csl # referencing format used.
+# By default, the bibliography only displays the cited references. If you want to change this, you can comment out one of the following:
+#nocite: '@*' # Add all items in bibliography, whether cited or not
+# nocite: |  # add specific references that aren't cited
+#  @grinold2000
+#  @Someoneelse2010
+
+# ---------- General:
+RemovePreprintSubmittedTo: TRUE  # Removes the 'preprint submitted to...' at bottom of titlepage
+#Journal: "Journal of Finance"   # Journal that the paper will be submitting to, if RemovePreprintSubmittedTo is set to TRUE.
+toc: FALSE                       # Add a table of contents
+numbersections: TRUE             # Should sections (and thus figures and tables) be numbered?
+fontsize: 11pt                  # Set fontsize
+linestretch: 1.2                # Set distance between lines.
+link-citations: TRUE            # This creates dynamic links to the papers in reference list.
+
+### Adding additional latex packages:
+# header-includes:
+#    - \usepackage{colortbl} # Add additional packages here.
+
+output:
+  pdf_document:
+    keep_tex: TRUE
+    template: Tex/TexDefault.txt
+    fig_width: 3.5 # Adjust default figure sizes. This can also be done in the chunks of the text.
+    fig_height: 3.5
+abstract: |
+  This document provides an analysis of the recent ZAR performance. The ZAR has been among the most volatile currencies in the recent past. Here the smoothed volatility is modelled using the GARCH method. The smoothed volatility is compared to global volatility. The performance of the ZAR is also determined for different periods.
+---
+
+<!-- First: Set your default preferences for chunk options: -->
+
+<!-- If you want a chunk's code to be printed, set echo = TRUE. message = FALSE stops R printing ugly package loading details in your final paper too. I also suggest setting warning = FALSE and checking for warnings in R, else you might find ugly warnings in your paper. -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = 6, fig.height = 5, fig.pos="H", fig.pos = 'H')
+# Note: Include = FALSE implies the code is executed, but not printed in your pdf.
+# warning and message = FALSE implies ugly messages and warnings are removed from your pdf.
+# These should be picked up when you execute the command chunks (code sections below) in your rmd, not printed in your paper!
+
+# Lets load in example data, and see how this can be stored and later called from your 'data' folder.
+if(!require("tidyverse")) install.packages("tidyverse")
+library(tidyverse)
+pacman::p_load(rugarch, cowplot, tbl2xts, fmxdat, ggplot2, sugrrants, kableExtra)
+list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
+
+```
+
+
+<!-- ############################## -->
+<!-- # Start Writing here: -->
+<!-- ############################## -->
+
+# Introduction \label{Introduction}
+
+The ZAR has been among the most volatile currencies in the recent past. Here the smoothed volatility is modelled using the GARCH method. The smoothed volatility is compared to global volatility. The performance of the ZAR is also determined for different periods. 
+
+# GARCH Model
+
+```{r}
+# Load Data
+
+cncy <- read_rds("data/currencies.rds")
+cncy_Carry <- read_rds("data/cncy_Carry.rds")
+cncy_value <- read_rds("data/cncy_value.rds")
+cncyIV <- read_rds("data/cncyIV.rds")
+bbdxy <- read_rds("data/bbdxy.rds")
+```
+
+From the Return Type Persistence plot, it is clear that there is a level of conditional heteroskedasticity. This is clear from the region of large squared returns. The ACF's of the dlog returns show limited autocorrelation in returns, but the ACF's of squared and absolute returns indicate autocorrelation. This coupled with the Box-Ljung test rejecting the hypothesis of no autocorrelation in teh squared returns indicates the need for a GARCH type model. \par
+
+The type of GARCH model that results in the lowest AIC is the gjrGARCH specification. This allows for leverage effects. The fitted gjrGARCH model gives the output as seen in Table \ref{tab:coef}. The plot comparing the squared returns to the GARCH smoothed returns shows the model smoothes out the noise from the signal.
+
+```{r q4_2}
+#Determine whether ZAR is more volatile
+zar_ret <- cncy %>% filter(date > as.Date("2009-12-31")) %>% filter(Name %in% "SouthAfrica_Cncy") %>% 
+    mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date)
+
+# Test for GARCH effects
+test_cond_het_func(zar_ret)
+
+# Find best model
+best_mod <- vol_select_func(zar_ret)
+best_mod
+
+# Fit Model
+garch_fit <- vol_func(zar_ret, "gjrGARCH")
+# Model Coefficients
+garch_fit@fit$matcoef %>% kable(., caption = "GARCH Coefficients", digits = 3,format = "latex", label = "coef")
+
+# Plot Model
+vol_plot_func(data = zar_ret, fit = garch_fit)
+```
+
+# ZAR Vol
+
+From Table \ref{tab:vol}, it is clear that the ZAR has been the fourth most volatile currency over the past decade.
+
+```{r q4_3}
+
+# Find highest vols
+
+cncy %>% filter(date > as.Date("2009-12-31")) %>% arrange(date) %>% 
+    group_by(Name) %>% 
+    mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date) %>% mutate(vol = dlogret^2) %>% 
+    summarise(`Mean_Vol` = mean(vol)) %>% 
+    arrange(desc(Mean_Vol)) %>% top_n(10, Mean_Vol) %>% 
+    kable(., format = "latex", caption = "Top 10 Highest Mean Squared Returns", label = "vol")
+
+```
+
+
+# ZAR Vol and Global Vol
+
+The below figure compares the smoothed volatility from the above GARCH model for the ZAR and the mean daily currency volatility index. In the beginning of the decade, the ZAR and global vol were not alined. However, since 2016, the ZAR Vol and Global Vol have moved in tandem. Thus ZAR Vol is a very clear proxy for Global Currency Vol.
+
+```{r q4_4}
+# Compare Smoothed ZAR Vol to mean Global VOL
+
+# Calculate Mean Global VOL
+mean_vol <- cncyIV %>% filter(date > as.Date("2009-12-31")) %>% 
+    group_by(date) %>% 
+    summarise(mean_vol = mean(Price)) %>% 
+        mutate(Global_vol = mean_vol/max(mean_vol))
+
+# Wrangle Sigma into dataframe
+sigma <- sigma(garch_fit) %>% xts_tbl() 
+colnames(sigma) <- c("date", "sigma") 
+sigma <- sigma %>% mutate(Date = as.Date(date)) %>% 
+    mutate(ZAR_sigma = sigma/max(sigma))%>% left_join(., mean_vol, by = "date")
+
+# Plot prop of max volatility to be comparable
+q4_p2 <- sigma %>% select(-date) %>% 
+    pivot_longer(c("ZAR_sigma", "Global_vol"), names_to = "Vol_type", values_to = "VOL") %>% 
+    ggplot() +
+    geom_line(aes(Date, VOL, colour = Vol_type)) +
+    labs(title = "Comparison of ZAR Cleaned Volatility and Mean Currency Volatility", x = "", 
+         y = "Prop of Max Vol") +
+    fmx_cols() +
+    theme_fmx(title.size = ggpts(25)) 
+
+finplot(q4_p2)
+
+```
+
+
+# ZAR Performance
+
+When comparing the average performance of the ZAR during normal times compared to periods of expected higher performance. The periods concerned are: the top decile of carry trade returns, bottom decile of value strategy returns, and the top decile of Dollar returns. From Table \ref{tab:zar}, ZAR performance is higher during the selected periods when compared to normal periods. The performance for each specified period is the same. This indicates that the periods most likely coincide.
+
+```{r}
+# Stratify for high carry trade periods and check ZAR Returns
+zar_ret <- cncy %>% filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% filter(Name %in% "SouthAfrica_Cncy") %>% 
+    mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date)
+
+# Find high carry trade periods
+carry_dat <- cncy_Carry %>% filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date) 
+
+df_carry <- carry_dat %>% 
+  mutate(YearMonth = format(Date, "%Y%B")) %>% 
+  group_by(YearMonth) %>%
+  mutate(TopQtile = quantile(dlogret, 0.9))
+
+Hi_carry <- df_carry %>% filter(dlogret > TopQtile) %>% pull(YearMonth)
+
+# Find low value periods
+value_dat <- cncy_value %>% 
+    filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date) 
+
+
+df_value <- value_dat %>% 
+  mutate(YearMonth = format(Date, "%Y%B")) %>% 
+  group_by(YearMonth) %>%
+  mutate(BotQtile = quantile(dlogret, 0.1))
+
+Low_value <- df_value %>% filter(dlogret < BotQtile) %>% pull(YearMonth)
+
+# Find Strong Dollar periods
+
+basket_dat <- bbdxy %>% 
+    filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date) 
+
+
+df_basket <- basket_dat %>% 
+  mutate(YearMonth = format(Date, "%Y%B")) %>% 
+  group_by(YearMonth) %>%
+  mutate(TopQtile = quantile(dlogret, 0.9))
+
+High_Basket <- df_basket %>% filter(dlogret > TopQtile) %>% pull(YearMonth)
+
+# Compare mean returns
+
+df_zar_carry <- zar_ret %>% 
+    mutate(YearMonth = format(Date, "%Y%B")) %>% 
+    filter(YearMonth %in% Hi_carry) %>% ungroup() %>% 
+    summarise(Mean_Ret = mean(dlogret)) %>% 
+    mutate(Type = "Carry-Trade")
+
+df_zar_value <- zar_ret %>% 
+    mutate(YearMonth = format(Date, "%Y%B")) %>% 
+    filter(YearMonth %in% Low_value) %>% ungroup() %>% 
+    summarise(Mean_Ret = mean(dlogret)) %>% 
+    mutate(Type = "Value")
+
+df_zar_basket <- zar_ret %>% 
+    mutate(YearMonth = format(Date, "%Y%B")) %>% 
+    filter(YearMonth %in% High_Basket) %>% ungroup() %>% 
+    summarise(Mean_Ret = mean(dlogret)) %>% 
+    mutate(Type = "Basket")
+
+df_norm <- zar_ret %>% ungroup() %>% 
+    summarise(Mean_Ret = mean(dlogret)) %>% 
+    mutate(Type = "Normal")
+
+rbind(df_norm, df_zar_carry, df_zar_value, df_zar_basket) %>% kable(., caption = "ZAR Performance during Different Periods", label = "zar", format = "latex")
+
+```
+
+
+
+
