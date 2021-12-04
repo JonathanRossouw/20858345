@@ -1,0 +1,194 @@
+---
+title: "Concentration of Returns Comparison"
+author: "Jonathan Rossouw"
+date: "4 December 2021"
+# date: "`r Sys.Date()`"
+bibliography: Tex/ref.bib       # Do not edit: Keep this naming convention and location.
+output:
+  pagedown::html_paged:
+    # template: wp_paged.html
+    # css: ['wp.css', 'wp-fonts.css', 'wp-page.css']
+    css: ["Template/default-fonts-Texevier.css", "Template/default-page-Texevier.css", "Template/default-Texevier.css"]
+    csl: Template/harvard-stellenbosch-university.csl # referencing format used.
+    template: ["Template/paged-Texevier.html"]
+
+    toc: true
+    # change to true for a self-contained document, but it'll be a litte slower for Pandoc to render
+    self_contained: TRUE
+abstract: |
+    This document contains an anaylsis of the correlation of returns for the JSE Top 40. The analysis make use of PCA and rolling constituent correlation techniques. High volatility periods are additionally considered.
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
+pacman::p_load(modelsummary, gt, knitr, kableExtra, tidyverse, cowplot, glue, fmxdat)
+list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
+
+```
+
+\newpage
+
+# Introduction {-}
+
+This document contains an anaylsis of the correlation of returns for the JSE Top 40. The analysis make use of PCA and rolling constituent correlation techniques. High volatility periods are additionally considered.
+
+
+# Normal Times
+
+## PCA
+
+
+```{r q3}
+# Load Data and Select Data
+
+T40 <- read_rds("data/T40.rds")
+
+T40_tick <- T40 %>% filter(date == last(date)) %>% arrange(desc(J200)) %>%  top_n(40, J200) %>% pull(Tickers) %>% unique()
+
+q_3_data <- T40 %>% filter(Tickers %in% T40_tick)
+
+```
+
+Following the PCA scree plot, the first principle component explains 25.9\% of variation in the data, while the second explains 8.2\%. The rest of the components gradually explain less but not insignificant amounts. This means that the data is not concentrated in a few directions. From the variables plot, there seems to be two distinct groupings. The groups are close to orthogonal which could indicate the possibility of potential diversification. Dim 1 consists of financial sector stocks primarily, while Dim 2 consists of resource stocks.
+
+```{r q3_1}
+
+pacman::p_load(FactoMineR, factoextra)
+
+# Calculate Variance Covariance Matrix 
+data_wide <- q_3_data %>% select(date, Tickers, Return) %>% spread(Tickers, 
+    Return) %>% select(-date)
+data_wide[is.na(data_wide)] <- 0
+
+pca <- PCA(data_wide, graph = FALSE)
+
+fviz_screeplot(pca, ncp = 10)
+
+fviz_pca_var(pca, col.var = "steelblue") + theme_minimal()
+
+fviz_contrib(pca, choice = "var", axes = 1, top = 10)
+fviz_contrib(pca, choice = "var", axes = 2, top = 10)
+```
+
+
+
+## RCC
+
+From the rolling constituent correlation plot, the market has alternating periods of high co-movement and low co-movement. Particularly in the early 2010s.
+
+```{r q3_2}
+# Calculate rolling constituent correlation
+
+df <- q_3_data %>% select(date, Tickers, Return) 
+
+# Create rolling constituent correlation function (Found at https://robotwealth.com/rolling-mean-correlations-in-the-tidyverse/)
+
+pairwise_corrs <- rolling_const_cor_func(df, 60)
+
+# Determine Mean 
+
+Mean_pair_cor <- pairwise_corrs %>% group_by(Tickers) %>% summarise(
+    Mean_Cor = mean(rollingcor)) 
+
+
+# Plot Mean over time
+mean_pw_cors <- pairwise_corrs %>%
+  group_by(date) %>%
+  summarise(mean_pw_corr = mean(rollingcor, na.rm = TRUE))
+
+q1_p1 <- mean_pw_cors %>% 
+    ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
+    fmx_cols() + theme_fmx(title = ggpts(25)) + 
+    labs(y = "Rolling Mean Constituent Correlation", x = "", title = "60-day Mean Rolling Constituent Correlation")
+
+finplot(q1_p1)
+
+```
+
+
+
+# High Volatility Periods
+
+There are 33 months of volatility greater than 80\% of months.
+
+## PCA
+
+During these periods, there is a greater concentration of co-movements. The first principal component accounts for 31.9\% of variation. A similar pattern emerges to the normal times. Financials make up most of the Dim 1 while Resources make up most of Dim 2.
+
+```{r q3_3_a}
+# Determine Periods of high volatility
+
+df <- q_3_data %>% select(date, Tickers, Return) 
+
+df_vol <- df %>% 
+  
+  mutate(YearMonth = format(date, "%Y%B")) %>% 
+  
+  group_by(YearMonth) %>% summarise(SD = sd(Return)*sqrt(52)) %>%
+  
+  # Top Decile Quantile overall (highly volatile month for ZAR:
+  mutate(TopQtile = quantile(SD, 0.8))
+
+Hi_Vol <- df_vol %>% filter(SD > TopQtile) %>% pull(YearMonth)
+
+
+# High col PCA
+
+data_wide <- q_3_data %>% 
+    mutate(YearMonth = format(date, "%Y%B"))%>% 
+    filter(YearMonth %in% Hi_Vol) %>% 
+    select(date, Tickers, Return) %>%
+    spread(Tickers, Return) %>% select(-date)
+data_wide[is.na(data_wide)] <- 0
+
+pca <- PCA(data_wide, graph = FALSE)
+
+fviz_screeplot(pca, ncp = 10)
+
+fviz_pca_var(pca, col.var = "steelblue", title = "High Vol Variables - PCA") + theme_minimal()
+
+fviz_contrib(pca, choice = "var", axes = 1, top = 10, title = "High Vol Contributions of variables to Dim-1")
+fviz_contrib(pca, choice = "var", axes = 2, top = 10, title = "High Vol Contributions of variables to Dim-2")
+
+```
+
+
+## RCC
+
+The RCC for the high vol periods does not express higher co-movement that the RCC for normal times. However, the co-movement is never as low as during the lowest normal times.
+
+```{r q3_3_b}
+
+# High Vol rolling constituent correlation
+
+df_rcc_vol <- q_3_data %>% select(date, Tickers, Return) %>% 
+    mutate(YearMonth = format(date, "%Y%B")) %>% 
+    filter(YearMonth %in% Hi_Vol) %>% select(-YearMonth)
+
+pairwise_corrs_vol <- rolling_const_cor_func(data = df_rcc_vol, time_frame = 60)
+
+# Determine Mean 
+
+Mean_pair_cor_vol <- pairwise_corrs_vol %>% group_by(Tickers) %>% summarise(
+    Mean_Cor = mean(rollingcor)) 
+
+
+# Plot Mean over time
+mean_pw_cors_vol <- pairwise_corrs_vol %>%
+  group_by(date) %>%
+  summarise(mean_pw_corr = mean(rollingcor, na.rm = TRUE))
+
+q1_p1 <- mean_pw_cors %>% 
+    ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
+    fmx_cols() + theme_fmx(title = ggpts(25)) + 
+    labs(y = "Rolling Mean Constituent Correlation", x = "", subtitle = "Normal RCC")
+
+q1_p2 <- mean_pw_cors_vol %>% 
+    ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
+    fmx_cols() + theme_fmx(title = ggpts(25)) + 
+    labs(y = "Rolling Mean Constituent Correlation", x = "", subtitle = "High Vol RCC")
+
+plot_grid(finplot(q1_p1), finplot(q1_p2))
+
+```

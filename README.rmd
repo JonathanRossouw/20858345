@@ -30,6 +30,12 @@ Texevier::create_template(directory = "Questions",
                           template_name = "Question2"
 )
 
+# Question 3
+Texevier::create_template_html(directory = "Questions",
+                          template_name = "Question3"
+)
+
+
 ```
 
 Source in all functions (This may not be necessary)
@@ -39,7 +45,7 @@ Source in all functions (This may not be necessary)
 rm(list = ls()) # Clean your environment:
 gc() # garbage collection - It can be useful to call gc after a large object has been removed, as this may prompt R to return memory to the operating system.
 library(tidyverse)
-pacman::p_load(cowplot)
+pacman::p_load(cowplot, glue)
 list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
 ```
 
@@ -725,6 +731,189 @@ fmxdat::theme_fmx(subtitle.size = ggpts(20))
 plot_grid(finplot(q2_p3), finplot(q2_p4), labels = list(title = "Comparing Capped and Uncapped returns of ALSI and SWIX"), label_size = ggpts(30), align = "h")
 
 ```
+
+
+
+
+
+# Question 3
+
+```{r q3_1}
+# Load Data and Select Data
+
+T40 <- read_rds("data/T40.rds")
+
+T40_tick <- T40 %>% filter(date == last(date)) %>% arrange(desc(J200)) %>%  top_n(40, J200) %>% pull(Tickers) %>% unique()
+
+q_3_data <- T40 %>% filter(Tickers %in% T40_tick)
+
+```
+
+* PCA
+
+```{r q3_2}
+
+pacman::p_load(FactoMineR, factoextra)
+
+# Calculate Variance Covariance Matrix 
+data_wide <- q_3_data %>% select(date, Tickers, Return) %>% spread(Tickers, 
+    Return) %>% select(-date)
+data_wide[is.na(data_wide)] <- 0
+
+pca <- PCA(data_wide, graph = FALSE)
+
+fviz_screeplot(pca, ncp = 10)
+
+fviz_pca_var(pca, col.var = "steelblue") + theme_minimal()
+
+fviz_contrib(pca, choice = "var", axes = 1, top = 10)
+fviz_contrib(pca, choice = "var", axes = 2, top = 10)
+```
+
+* Calculate Rolling Correlation
+
+
+```{r}
+# Calculate rolling constituent correlation
+
+df <- q_3_data %>% select(date, Tickers, Return) 
+
+# Create rolling constituent correlation function (Found at https://robotwealth.com/rolling-mean-correlations-in-the-tidyverse/)
+
+rolling_const_cor_func <- function(data = df, time_frame = 60){
+    
+pairwise_combos <- data %>%
+  full_join(data, by = "date") 
+
+pairwise_combos <- pairwise_combos %>%
+  ungroup() %>%  # important!! 
+# drop diagonal 
+  filter(Tickers.x != Tickers.y) %>% 
+# remove duplicate pairs (eg A-AAL, AAL-A)
+  mutate(Tickers = ifelse(Tickers.x < Tickers.y, glue("{Tickers.x}, {Tickers.y}"), glue("{Tickers.y}, {Tickers.x}"))) %>%
+  distinct(date, Tickers, .keep_all = TRUE) 
+
+period <- time_frame
+pairwise_corrs <- pairwise_combos %>%
+  group_by(Tickers) %>%
+  arrange(date, .by_group = TRUE) %>%
+  mutate(rollingcor = slider::slide2_dbl(
+    .x = Return.x, 
+    .y = Return.y, 
+    .f = ~cor(.x, .y), 
+    .before = period, 
+    .complete = TRUE)
+    ) %>%
+  select(date, Tickers, rollingcor)
+
+pairwise_corrs[is.na(pairwise_corrs)] <- 0
+    
+pairwise_corrs    
+    
+}
+
+pairwise_corrs <- rolling_const_cor_func(df, 60)
+
+# Determine Mean 
+
+Mean_pair_cor <- pairwise_corrs %>% group_by(Tickers) %>% summarise(
+    Mean_Cor = mean(rollingcor)) 
+
+
+# Plot Mean over time
+mean_pw_cors <- pairwise_corrs %>%
+  group_by(date) %>%
+  summarise(mean_pw_corr = mean(rollingcor, na.rm = TRUE))
+
+q1_p1 <- mean_pw_cors %>% 
+    ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
+    fmx_cols() + theme_fmx(title = ggpts(25)) + 
+    labs(y = "Rolling Mean Constituent Correlation", x = "", title = "60-day Mean Rolling Constituent Correlation")
+
+finplot(q1_p1)
+
+```
+
+
+* Stratify for high vol
+
+
+```{r q3_3_a}
+# Determine Periods of high volatility
+
+df <- q_3_data %>% select(date, Tickers, Return) 
+
+df_vol <- df %>% 
+  
+  mutate(YearMonth = format(date, "%Y%B")) %>% 
+  
+  group_by(YearMonth) %>% summarise(SD = sd(Return)*sqrt(52)) %>%
+  
+  # Top Decile Quantile overall (highly volatile month for ZAR:
+  mutate(TopQtile = quantile(SD, 0.8))
+
+Hi_Vol <- df_vol %>% filter(SD > TopQtile) %>% pull(YearMonth)
+
+df_vol <- q_3_data %>% select(date, Tickers, Return) %>% 
+    mutate(YearMonth = format(date, "%Y%B")) %>% 
+    filter(YearMonth %in% Hi_Vol)
+
+
+# High col PCA
+
+data_wide <- q_3_data %>% 
+    mutate(YearMonth = format(date, "%Y%B"))%>% 
+    filter(YearMonth %in% Hi_Vol) %>% 
+    select(date, Tickers, Return) %>%
+    spread(Tickers, Return) %>% select(-date)
+data_wide[is.na(data_wide)] <- 0
+
+pca <- PCA(data_wide, graph = FALSE)
+
+fviz_screeplot(pca, ncp = 10)
+
+fviz_pca_var(pca, col.var = "steelblue", title = "High Vol Variables - PCA") + theme_minimal()
+
+fviz_contrib(pca, choice = "var", axes = 1, top = 10, title = "High Vol Contributions of variables to Dim-1")
+fviz_contrib(pca, choice = "var", axes = 2, top = 10, title = "High Vol Contributions of variables to Dim-2")
+
+```
+
+```{r q3_3_b}
+
+# High Vol rolling constituent correlation
+
+pairwise_corrs_vol <- rolling_const_cor_func(df_vol, 60)
+
+# Determine Mean 
+
+Mean_pair_cor_vol <- pairwise_corrs_vol %>% group_by(Tickers) %>% summarise(
+    Mean_Cor = mean(rollingcor)) 
+
+
+# Plot Mean over time
+mean_pw_cors_vol <- pairwise_corrs_vol %>%
+  group_by(date) %>%
+  summarise(mean_pw_corr = mean(rollingcor, na.rm = TRUE))
+
+q1_p1 <- mean_pw_cors %>% 
+    ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
+    fmx_cols() + theme_fmx(title = ggpts(25)) + 
+    labs(y = "Rolling Mean Constituent Correlation", x = "")
+
+finplot(q1_p1)
+
+q1_p2 <- mean_pw_cors_vol %>% 
+    ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
+    fmx_cols() + theme_fmx(title = ggpts(25)) + 
+    labs(y = "Rolling Mean Constituent Correlation", x = "")
+
+finplot(q1_p2)
+
+plot_grid(finplot(q1_p1), finplot(q1_p2), title = "60-day Mean Rolling Constituent Correlation")
+
+```
+
 
 
 
