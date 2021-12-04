@@ -40,6 +40,12 @@ Texevier::create_template(directory = "Questions",
                           template_name = "Question4"
 )
 
+# Question 5
+Texevier::create_template_html(directory = "Questions",
+                          template_name = "Question5"
+)
+
+
 
 ```
 
@@ -928,7 +934,7 @@ plot_grid(finplot(q1_p1), finplot(q1_p2), title = "60-day Mean Rolling Constitue
 
 # Question 4
 
-```{r}
+```{r q4_data}
 # Load Data
 
 cncy <- read_rds("data/currencies.rds")
@@ -1133,7 +1139,7 @@ finplot(q4_p2)
 
 * ZAR Returns during high Carry Trade Returns
 
-```{r}
+```{r q4_5}
 # Stratify for high carry trade periods and check ZAR Returns
 zar_ret <- cncy %>% filter(date > as.Date("2009-12-31") & date < as.Date("2020-01-01")) %>% filter(Name %in% "SouthAfrica_Cncy") %>% 
     mutate(dlogret = log(Price) - lag(log(Price))) %>% filter(date > first(date)) %>% rename(Date = date)
@@ -1201,4 +1207,256 @@ rbind(df_norm, df_zar_carry, df_zar_value, df_zar_basket)
 
 ```
 
+
+
+# Question 5
+
+```{r q5}
+# Load Data
+pacman::p_load("MTS", "robustbase")
+pacman::p_load("tidyverse", "devtools", "rugarch", "rmgarch", 
+    "forecast", "tbl2xts", "lubridate", "PerformanceAnalytics", 
+    "ggthemes")
+
+msci <- read_rds("data/msci.rds")
+bonds <- read_rds("data/bonds_10y.rds")
+comms <- read_rds("data/comms.rds")
+```
+
+```{r q5_1}
+# Calculate Returns for Assets
+
+# Calculate All World Index Returns
+stock <- msci %>% filter(Name %in% "MSCI_ACWI") %>% 
+    mutate(dlogret = log(Price) - log(lag(Price))) %>% 
+    mutate(scaledret = (dlogret - 
+    mean(dlogret, na.rm = T))) %>% 
+    filter(date > dplyr::first(date)) %>% select(-Price) %>%
+    filter(date > as.Date("2005-06-20")) %>% 
+    rename(MSCI_ACWI = scaledret) %>%
+    select(date, MSCI_ACWI)
+# Calculate Japanese 10 Year Bond Returns
+bond <- bonds %>% filter(Name %in% "EURO_10Yr") %>% 
+    mutate(dlogret = Bond_10Yr/lag(Bond_10Yr) - 1) %>%
+    mutate(scaledret = (dlogret - 
+    mean(dlogret, na.rm = T))) %>% 
+    filter(date > dplyr::first(date)) %>% select(-Bond_10Yr) %>%
+    filter(date > as.Date("2005-06-20"))%>% 
+    rename(EURO_10Yr = scaledret) %>%
+    select(date, EURO_10Yr)
+# Calculate US Real Estate Returns
+re <- msci %>% filter(Name %in% "MSCI_USREIT") %>% 
+    mutate(dlogret = log(Price) - log(lag(Price))) %>% 
+    mutate(scaledret = (dlogret - 
+    mean(dlogret, na.rm = T))) %>% 
+    filter(date > dplyr::first(date)) %>% select(-Price) %>%
+    filter(date > as.Date("2005-06-20")) %>% 
+    rename(MSCI_USREIT = scaledret) %>%
+    select(date, MSCI_USREIT)
+# Calculate Brent Crude Oil Returns
+comm <- comms %>% filter(Name %in% "Oil_Brent" ) %>% 
+    mutate(dlogret = log(Price) - log(lag(Price))) %>% 
+    mutate(scaledret = (dlogret - 
+    mean(dlogret, na.rm = T))) %>% 
+    filter(date > dplyr::first(date)) %>% select(-Price) %>%
+    filter(date > as.Date("2005-06-20")) %>% 
+    rename(Oil_Brent = scaledret) %>% 
+    select(date, Oil_Brent)
+# Combine and wrangle for DCC models
+assets <- left_join(stock, bond, by = c("date")) %>% 
+    left_join(., re, by = c("date")) %>% 
+    left_join(., comm, by = c("date")) %>% 
+    tbl_xts()
+
+```
+
+
+```{r q5_2}
+# Renaming DCC code from Tutorial
+renamingdcc <- function(ReturnSeries, DCC.TV.Cor) {
+  
+ncolrtn <- ncol(ReturnSeries)
+namesrtn <- colnames(ReturnSeries)
+paste(namesrtn, collapse = "_")
+
+nam <- c()
+xx <- mapply(rep, times = ncolrtn:1, x = namesrtn)
+# Now let's be creative in designing a nested for loop to save the names corresponding to the columns of interest.. 
+
+# TIP: draw what you want to achieve on a paper first. Then apply code.
+
+# See if you can do this on your own first.. Then check vs my solution:
+
+nam <- c()
+for (j in 1:(ncolrtn)) {
+for (i in 1:(ncolrtn)) {
+  nam[(i + (j-1)*(ncolrtn))] <- paste(xx[[j]][1], xx[[i]][1], sep="_")
+}
+}
+
+colnames(DCC.TV.Cor) <- nam
+
+# So to plot all the time-varying correlations wrt SBK:
+ # First append the date column that has (again) been removed...
+DCC.TV.Cor <- 
+    data.frame( cbind( date = index(ReturnSeries), DCC.TV.Cor)) %>% # Add date column which dropped away...
+    mutate(date = as.Date(date)) %>%  tbl_df() 
+
+DCC.TV.Cor <- DCC.TV.Cor %>% gather(Pairs, Rho, -date)
+
+DCC.TV.Cor
+
+}
+```
+
+```{r q5_3}
+# Determine whether autocorrelation using March Test
+MarchTest(assets)
+
+# Use tutorial code to fit gjrGARCH (1,0) and DCC (1,1)
+
+# Set GARCH specifications
+uspec <- ugarchspec(variance.model = list(model = "gjrGARCH", 
+    garchOrder = c(1, 1)), mean.model = list(armaOrder = c(1, 
+    0), include.mean = TRUE), distribution.model = "sstd")
+
+multi_univ_garch_spec <- multispec(replicate(ncol(assets), uspec))
+
+# Set DCC specifications
+spec.dcc = dccspec(multi_univ_garch_spec, dccOrder = c(1, 1), 
+    distribution = "mvnorm", lag.criterion = c("AIC", "HQ", "SC", 
+        "FPE")[1], model = c("DCC", "aDCC")[1])  
+
+# Parallelize 
+cl = makePSOCKcluster(10)
+
+# Fit GARCH
+multf = multifit(multi_univ_garch_spec, assets, cluster = cl)
+
+# Fit DCC
+fit.dcc = dccfit(spec.dcc, data = assets, solver = "solnp", 
+    cluster = cl, fit.control = list(eval.se = FALSE), fit = multf)
+
+# Check Model
+RcovList <- rcov(fit.dcc) 
+covmat = matrix(RcovList, nrow(assets), ncol(assets) * ncol(assets), 
+    byrow = TRUE)
+mc1 = MCHdiag(assets, covmat)
+
+# Wrangle DCC Output
+dcc.time.var.cor <- rcor(fit.dcc)
+dcc.time.var.cor <- aperm(dcc.time.var.cor, c(3, 2, 1))
+dim(dcc.time.var.cor) <- c(nrow(dcc.time.var.cor), ncol(dcc.time.var.cor)^2)
+
+# Rename DCC Output
+
+dcc.time.var.cor <- renamingdcc(ReturnSeries = assets, DCC.TV.Cor = dcc.time.var.cor)
+
+# Create Plots
+
+# Stocks
+g1 <- ggplot(dcc.time.var.cor %>% filter(grepl("MSCI_ACWI_", Pairs), 
+    !grepl("_MSCI_ACWI", Pairs))) + geom_line(aes(x = date, y = Rho, 
+    colour = Pairs)) + theme_hc() + labs(subtitle = "Dynamic Conditional Correlations: MSCI_ACWI", x = "", y = "") +
+    fmx_cols() + theme_fmx(subtitle.size = ggpts(25), legend.size = ggpts(15))
+
+# Bonds
+g2 <- ggplot(dcc.time.var.cor %>% filter(grepl("EURO_10Yr_", Pairs), 
+    !grepl("_EURO_10Yr", Pairs))) + geom_line(aes(x = date, y = Rho, 
+    colour = Pairs)) + theme_hc() + labs(subtitle="Dynamic Conditional Correlations: EURO_10Yr", x = "", y = "") +
+    fmx_cols() + theme_fmx(subtitle.size = ggpts(25), legend.size = ggpts(15))
+
+# Real Estate
+g3 <- ggplot(dcc.time.var.cor %>% filter(grepl("MSCI_USREIT_", Pairs), 
+    !grepl("_MSCI_USREIT", Pairs))) + geom_line(aes(x = date, y = Rho, 
+    colour = Pairs)) + theme_hc() + labs(subtitle = "Dynamic Conditional Correlations: MSCI_USREIT", x = "", y = "") +
+    fmx_cols() + theme_fmx(subtitle.size = ggpts(25), legend.size = ggpts(15))
+
+
+# Commodities
+g4 <- ggplot(dcc.time.var.cor %>% filter(grepl("Oil_Brent_", Pairs), 
+    !grepl("_Oil_Brent", Pairs))) + geom_line(aes(x = date, y = Rho, 
+    colour = Pairs)) + theme_hc() + labs(subtitle = "Dynamic Conditional Correlations: Oil_Brent", x = "", y = "") +
+    fmx_cols() + theme_fmx(subtitle.size = ggpts(25), legend.size = ggpts(15))
+
+g1
+g2
+g3
+g4
+
+```
+
+```{r q5_4}
+# Go-GARCH following the Tutorial
+
+# GARCH Specifications
+spec.go <- gogarchspec(multi_univ_garch_spec, 
+                       distribution.model = 'mvnorm', 
+                       ica = 'fastica') 
+# Parallelize
+cl <- makePSOCKcluster(10)
+# Fit GARCH
+multf <- multifit(multi_univ_garch_spec, assets, cluster = cl)
+
+#GO-GARCH Specifications
+fit.gogarch <- gogarchfit(spec.go, 
+                      data = assets, 
+                      solver = 'hybrid', 
+                      cluster = cl, 
+                      gfun = 'tanh', 
+                      maxiter1 = 40000, 
+                      epsilon = 1e-08, 
+                      rseed = 100)
+
+# Go-Garch Fit
+print(fit.gogarch)
+
+
+# Wrangle Output
+gog.time.var.cor <- rcor(fit.gogarch)
+gog.time.var.cor <- aperm(gog.time.var.cor,c(3,2,1))
+dim(gog.time.var.cor) <- c(nrow(gog.time.var.cor), ncol(gog.time.var.cor)^2)
+
+# Rename Output
+gog.time.var.cor <-
+renamingdcc(ReturnSeries = assets, DCC.TV.Cor = gog.time.var.cor)
+
+
+# Create Plots
+
+# Stocks
+g2_1 <- ggplot(gog.time.var.cor %>% filter(grepl("MSCI_ACWI_", Pairs), 
+    !grepl("_MSCI_ACWI", Pairs))) + geom_line(aes(x = date, y = Rho, 
+    colour = Pairs)) + theme_hc() + labs(subtitle = "Go-Garch: MSCI_ACWI", x = "", y = "") +
+    fmx_cols() + theme_fmx(subtitle.size = ggpts(25), legend.size = ggpts(15))
+
+# Bonds
+g2_2 <- ggplot(gog.time.var.cor %>% filter(grepl("EURO_10Yr_", Pairs), 
+    !grepl("_EURO_10Yr", Pairs))) + geom_line(aes(x = date, y = Rho, 
+    colour = Pairs)) + theme_hc() + labs(subtitle="Go-Garch: EURO_10Yr", x = "", y = "") +
+    fmx_cols() + theme_fmx(subtitle.size = ggpts(25), legend.size = ggpts(15))
+
+# Real Estate
+g2_3 <- ggplot(gog.time.var.cor %>% filter(grepl("MSCI_USREIT_", Pairs), 
+    !grepl("_MSCI_USREIT", Pairs))) + geom_line(aes(x = date, y = Rho, 
+    colour = Pairs)) + theme_hc() + labs(subtitle = "Go-Garch: MSCI_USREIT", x = "", y = "") +
+    fmx_cols() + theme_fmx(subtitle.size = ggpts(25), legend.size = ggpts(15))
+
+
+# Commodities
+g2_4 <- ggplot(gog.time.var.cor %>% filter(grepl("Oil_Brent_", Pairs), 
+    !grepl("_Oil_Brent", Pairs))) + geom_line(aes(x = date, y = Rho, 
+    colour = Pairs)) + theme_hc() + labs(subtitle = "Go-GARCH: Oil_Brent", x = "", y = "") +
+    fmx_cols() + theme_fmx(subtitle.size = ggpts(25), legend.size = ggpts(15))
+
+g2_1
+g2_2
+g2_3
+g2_4
+```
+
+
+
+
+# Question 6
 
