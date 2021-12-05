@@ -84,7 +84,8 @@ df <- q_3_data %>% select(date, Tickers, Return)
 
 # Create rolling constituent correlation function (Found at https://robotwealth.com/rolling-mean-correlations-in-the-tidyverse/)
 
-pairwise_corrs <- rolling_const_cor_func(df, 60)
+pairwise_corrs <- rolling_const_cor_func(df, 60) %>% ungroup() %>% filter(date > as.Date("2008/03/28"))
+
 
 # Determine Mean 
 
@@ -166,7 +167,9 @@ df_rcc_vol <- q_3_data %>% select(date, Tickers, Return) %>%
     mutate(YearMonth = format(date, "%Y%B")) %>% 
     filter(YearMonth %in% Hi_Vol) %>% select(-YearMonth)
 
-pairwise_corrs_vol <- rolling_const_cor_func(data = df_rcc_vol, time_frame = 60)
+# High Vol rolling constituent correlation
+
+pairwise_corrs_vol <- rolling_const_cor_func(df_rcc_vol, 60) %>% ungroup() %>% filter(date > as.Date("2008/03/28"))
 
 # Determine Mean 
 
@@ -182,12 +185,12 @@ mean_pw_cors_vol <- pairwise_corrs_vol %>%
 q1_p1 <- mean_pw_cors %>% 
     ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
     fmx_cols() + theme_fmx(title = ggpts(25)) + 
-    labs(y = "Rolling Mean Constituent Correlation", x = "", subtitle = "Normal RCC")
+    labs(y = "Rolling Mean Constituent Correlation", x = "", title = "60-day Mean Rolling Constituent Correlation", subtitle = "Normal Times") + theme_fmx()
 
 q1_p2 <- mean_pw_cors_vol %>% 
     ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
     fmx_cols() + theme_fmx(title = ggpts(25)) + 
-    labs(y = "Rolling Mean Constituent Correlation", x = "", subtitle = "High Vol RCC")
+    labs(y = "Rolling Mean Constituent Correlation", x = "", title = "   ", subtitle = "High Vol Times") + theme_fmx()
 
 plot_grid(finplot(q1_p1), finplot(q1_p2))
 

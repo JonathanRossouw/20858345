@@ -36,6 +36,11 @@ Texevier::create_template(directory = "Questions",
 Texevier::create_template_html(directory = "Questions",
                           template_name = "Question5"
 )
+
+# Question 6
+Texevier::create_template_html(directory = "Questions",
+                          template_name = "Question6"
+)
 ```
 
 Source in all functions (This may not be necessary)
@@ -46,8 +51,8 @@ gc() # garbage collection - It can be useful to call gc after a large object has
 ```
 
     ##          used (Mb) gc trigger (Mb) limit (Mb) max used (Mb)
-    ## Ncells 424494 22.7     879377   47         NA   666925 35.7
-    ## Vcells 811877  6.2    8388608   64     102400  1823999 14.0
+    ## Ncells 424763 22.7     880145 47.1         NA   666925 35.7
+    ## Vcells 814039  6.3    8388608 64.0     102400  1823999 14.0
 
 ``` r
 library(tidyverse)
@@ -779,7 +784,7 @@ plot_grid(finplot(q2_p3), finplot(q2_p4), labels = list(title = "Comparing Cappe
 
 T40 <- read_rds("data/T40.rds")
 
-T40_tick <- T40 %>% filter(date == last(date)) %>% arrange(desc(J200)) %>%  top_n(40, J200) %>% pull(Tickers) %>% unique()
+T40_tick <- T40 %>% filter(date == dplyr::last(date)) %>% arrange(desc(J200)) %>%  top_n(40, J200) %>% pull(Tickers) %>% unique()
 
 q_3_data <- T40 %>% filter(Tickers %in% T40_tick)
 ```
@@ -860,7 +865,7 @@ pairwise_corrs
     
 }
 
-pairwise_corrs <- rolling_const_cor_func(df, 60)
+pairwise_corrs <- rolling_const_cor_func(df, 60) %>% ungroup() %>% filter(date > as.Date("2008/03/28"))
 
 # Determine Mean 
 
@@ -943,7 +948,7 @@ fviz_contrib(pca, choice = "var", axes = 2, top = 10, title = "High Vol Contribu
 ``` r
 # High Vol rolling constituent correlation
 
-pairwise_corrs_vol <- rolling_const_cor_func(df_vol, 60)
+pairwise_corrs_vol <- rolling_const_cor_func(df_vol, 60) %>% ungroup() %>% filter(date > as.Date("2008/03/28"))
 
 # Determine Mean 
 
@@ -959,32 +964,17 @@ mean_pw_cors_vol <- pairwise_corrs_vol %>%
 q1_p1 <- mean_pw_cors %>% 
     ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
     fmx_cols() + theme_fmx(title = ggpts(25)) + 
-    labs(y = "Rolling Mean Constituent Correlation", x = "")
+    labs(y = "Rolling Mean Constituent Correlation", x = "", title = "60-day Mean Rolling Constituent Correlation", subtitle = "Normal Times") + theme_fmx()
 
-finplot(q1_p1)
-```
-
-![](README_files/figure-markdown_github/q3_3_b-1.png)
-
-``` r
 q1_p2 <- mean_pw_cors_vol %>% 
     ggplot() + geom_line(aes(date, mean_pw_corr), alpha = 0.8, color ="steelblue") +
     fmx_cols() + theme_fmx(title = ggpts(25)) + 
-    labs(y = "Rolling Mean Constituent Correlation", x = "")
+    labs(y = "Rolling Mean Constituent Correlation", x = "", title = "   ", subtitle = "High Vol Times") + theme_fmx()
 
-finplot(q1_p2)
+plot_grid(finplot(q1_p1), finplot(q1_p2))
 ```
 
-![](README_files/figure-markdown_github/q3_3_b-2.png)
-
-``` r
-plot_grid(finplot(q1_p1), finplot(q1_p2), title = "60-day Mean Rolling Constituent Correlation")
-```
-
-    ## Warning in as_grob.default(plot): Cannot convert object of class character into
-    ## a grob.
-
-![](README_files/figure-markdown_github/q3_3_b-3.png)
+![](README_files/figure-markdown_github/q3_3_b-1.png)
 
 # Question 4
 
@@ -1301,6 +1291,8 @@ rbind(df_norm, df_zar_carry, df_zar_value, df_zar_basket)
     ## 4 0.000245 Basket
 
 # Question 5
+
+Construct DCC and Go-Garch for stocks, bonds, real estate and commodity.
 
 ``` r
 # Load Data
@@ -1638,3 +1630,250 @@ g2_4
 ![](README_files/figure-markdown_github/q5_4-4.png)
 
 # Question 6
+
+``` r
+# Load in Data
+MAA <- read_rds("data/MAA.rds") %>% select(-Name) %>% arrange(date) %>% rename(Tickers = Ticker)
+msci <- read_rds("data/msci.rds") %>%
+filter(Name %in% c("MSCI_ACWI", "MSCI_USA", "MSCI_RE", "MSCI_Jap")) %>% rename(Tickers = Name) %>% arrange(date)
+    
+# Combine Assets classes
+comb_assets <- rbind(MAA, msci) %>% arrange(date)
+comb_assets_3_years <- comb_assets %>% group_by(Tickers) %>% filter(date == as.Date("2018/01/01")) %>% pull(Tickers) %>% unique()
+    
+# Filter that all Tickers that have data for at least previous 3 years
+Start_Date <- comb_assets %>% 
+    filter(Tickers %in% comb_assets_3_years) %>% 
+    group_by(Tickers) %>% summarise(date = dplyr::first(date)) %>% summarise(latest = dplyr::first(date))
+
+# Get dates for Rebalancing
+EOM_datevec <- comb_assets %>% 
+    filter(Tickers %in% comb_assets_3_years) %>% 
+    filter(date >= Start_Date[[1]]) %>% select(date) %>% unique %>% mutate(YM = format(date, "%Y%B")) %>% group_by(YM) %>% filter(date == dplyr::last(date)) %>% ungroup() %>% pull(date) %>% unique
+
+# Quaterly Rebalancing dates
+quarter_reb <- rmsfuns::dateconverter(as.Date(EOM_datevec[1]), as.Date(EOM_datevec[238]), 
+    "weekdayEOQ") 
+
+# Filter data quaterly dates, determine returns
+comb_assets <- comb_assets %>% 
+    filter(Tickers %in% comb_assets_3_years) %>% 
+    filter(date >= Start_Date[[1]]) %>% 
+    filter(date %in% quarter_reb) %>% 
+    group_by(Tickers) %>% 
+    mutate(ret = Price/lag(Price) - 1) %>% 
+    filter(date > dplyr::first(date)) %>% 
+    select(-Price) %>%
+    spread(Tickers, ret)
+```
+
+``` r
+# Imputation function frmo Tutorial
+impute_missing_returns <- function(return_mat, impute_returns_method = "NONE", Seed = 1234){
+  # Make sure we have a date column called date:
+  if( !"date" %in% colnames(return_mat) ) stop("No 'date' column provided in return_mat. Try again please.")
+
+  # Note my use of 'any' below...
+  # Also note that I 'return' return_mat - which stops the function and returns return_mat. 
+  if( impute_returns_method %in% c("NONE", "None", "none") ) {
+    if( any(is.na(return_mat)) ) warning("There are missing values in the return matrix.. Consider maybe using impute_returns_method = 'Drawn_Distribution_Own' / 'Drawn_Distribution_Collective'")
+    return(return_mat)
+  }
+
+  
+  if( impute_returns_method  == "Average") {
+
+    return_mat <-
+      return_mat %>% gather(Stocks, Returns, -date) %>%
+      group_by(date) %>%
+      mutate(Avg = mean(Returns, na.rm=T)) %>%
+      mutate(Avg = coalesce(Avg, 0)) %>% # date with no returns - set avg to zero
+      ungroup() %>%
+      mutate(Returns = coalesce(Returns, Avg)) %>% select(-Avg) %>% spread(Stocks, Returns)
+
+    # That is just so much easier when tidy right? See how I gathered and spread again to give back a wide df?
+    return(return_mat)
+  } else
+
+    if( impute_returns_method  == "Drawn_Distribution_Own") {
+
+      set.seed(Seed)
+      N <- nrow(return_mat)
+      return_mat <-
+        # DIY: see what density function does
+left_join(return_mat %>% gather(Stocks, Returns, -date),
+          return_mat %>% gather(Stocks, Returns, -date) %>% group_by(Stocks) %>%
+          mutate(Dens = list(density(Returns, na.rm=T))) %>%
+          summarise(Random_Draws = list(sample(Dens[[1]]$x, N, replace = TRUE, prob=.$Dens[[1]]$y))),
+          by = "Stocks"
+) %>%  group_by(Stocks) %>% 
+  # Random draw from sample:
+  mutate(Returns = coalesce(Returns, Random_Draws[[1]][row_number()])) %>%
+  select(-Random_Draws) %>% ungroup() %>% spread(Stocks, Returns)
+return(return_mat)
+    } else
+
+      if( impute_returns_method  == "Drawn_Distribution_Collective") {
+
+        set.seed(Seed)
+        NAll <- nrow(return_mat %>% gather(Stocks, Returns, -date))
+        # DIY: see what density function does
+        return_mat <-
+          bind_cols(
+          return_mat %>% gather(Stocks, Returns, -date),
+          return_mat %>% gather(Stocks, Returns, -date) %>%
+            mutate(Dens = list(density(Returns, na.rm=T))) %>%
+            summarise(Random_Draws = list(sample(Dens[[1]]$x, NAll, replace = TRUE, prob=.$Dens[[1]]$y))) %>% 
+            unnest(Random_Draws)
+          ) %>%
+          mutate(Returns = coalesce(Returns, Random_Draws)) %>% select(-Random_Draws) %>% spread(Stocks, Returns)
+return(return_mat)
+      } else
+
+        if( impute_returns_method  == "Zero") {
+        warning("This is probably not the best idea but who am I to judge....")
+          return_mat[is.na(return_mat)] <- 0
+  return(return_mat)
+        } else
+          stop("Please provide a valid impute_returns_method method. Options include:\n'Average', 'Drawn_Distribution_Own', 'Drawn_Distribution_Collective' and 'Zero'.")
+  
+  return_mat
+  
+}
+
+# Impute missing values for return series
+options(scipen = 999)
+return_mat <- 
+  impute_missing_returns(comb_assets, impute_returns_method = "Drawn_Distribution_Collective", Seed = as.numeric(format( Sys.time(), "%Y%d%H%M")))
+
+# Create returns matrix
+return_mat_Nodate <- data.matrix(return_mat[, -1])
+```
+
+``` r
+# Create constraints
+
+NStox <- ncol(return_mat_Nodate)
+LB = 0.01
+UB = 0.4
+Eq = 0.6 # Equity Upper Bound
+Bonds = 0.25 # Credit and Bonds Upper Bound
+meq = 1
+
+# Make A Mat 
+Eq_mat <- rbind(matrix(0, nrow = 9, ncol = 4),
+                -diag(4))
+
+C_B_mat <- rbind(matrix(0, 3, 6), 
+                 -diag(6),
+                 matrix(0, 4, 6))
+
+bvec <- c(1, rep(LB, NStox), -rep(UB, NStox), -rep(Eq, 4), -rep(Bonds, 6))
+Amat <- cbind(1, diag(NStox), -diag(NStox), Eq_mat, C_B_mat)
+
+# Create Optimisation function
+optim_foo <- function(type = "mv", mu, Sigma, bvec, Amat, printmsg = TRUE){
+    # Check to see if type is correct
+    if(type != "mv" & type != "minvol" & type != "maxdecor" & type != "sharpe") stop("Wrong type")
+    # Wrap function
+    Safe_Optim <- purrr::safely(quadprog::solve.QP)
+    # Determine optimisation weights
+    if(type == "mv"){
+        w.opt <- 
+    Safe_Optim(Dmat = Sigma,
+                            dvec = mu, 
+                            Amat = Amat, 
+                            bvec = bvec, 
+                            meq = meq)
+    }
+    if(type == "minvol"){
+        w.opt <- 
+    Safe_Optim(Dmat = Sigma,
+                            dvec = rep(0, nrow(Sigma)), 
+                            Amat = Amat, 
+                            bvec = bvec, 
+                            meq = meq)
+    }
+    if(type == "maxdecor"){
+        Rho <- cov2cor(Sigma)
+        w.opt <- 
+    Safe_Optim(Dmat = Sigma,
+                            dvec = rep(0, nrow(Sigma)), 
+                            Amat = Amat, 
+                            bvec = bvec, 
+                            meq = meq)
+    }
+    if(type == "sharpe"){
+    Amat[,1] <- mu
+    w.opt <- Safe_Optim(Dmat = Sigma,
+                            dvec = rep(0, nrow(Sigma)), 
+                            Amat = Amat, 
+                            bvec = bvec, 
+                            meq = meq)
+    }
+    
+    # Create Weights Table output
+    if(is.null(w.opt$error)){
+         result.QP <- tibble(stocks = colnames(Sigma), weight = w.opt$result$solution) %>% 
+     rename(!!type := weight)
+    }  else {
+        result.QP <- tibble(stocks = colnames(Sigma), weight = 1/ncol(Sigma)) %>% 
+     rename(!!type := weight)
+    }
+ result.QP
+}
+```
+
+``` r
+# Create Rolling function
+Roll_optimizer <- function(return_mat, EOM_datevec, LookBack = 24, Amat, bvec){
+  
+return_df_used <- return_mat %>% filter(date >= EOM_datevec %m-% months(LookBack))
+  
+if(return_df_used %>% nrow() < LookBack) return(NULL)
+
+return_mat_Nodate <- data.matrix(return_mat[, -1])
+# Calculate Sigma and mu
+HTT <- fitHeavyTail::fit_mvt(return_mat_Nodate)
+mu <- HTT$mu
+Sigma <- HTT$cov
+
+Sigma <- as.matrix( Matrix::nearPD(Sigma)$mat)
+
+# Fit optimisation function with different types
+My_Weights <- left_join(
+  optim_foo(type = "mv", mu, Sigma, bvec, Amat, printmsg = F), 
+  optim_foo(type = "minvol", mu, Sigma, bvec, Amat, printmsg = F), 
+  by = "stocks") %>% 
+    left_join(., optim_foo(type = "maxdecor", mu, Sigma, bvec, Amat, printmsg = F), 
+  by = "stocks") %>% 
+    left_join(., optim_foo(type = "sharpe", mu, Sigma, bvec, Amat, printmsg = F), 
+  by = "stocks") %>% 
+  mutate(date = EOM_datevec , Look_Back_Period = LookBack)
+  
+}
+# Calculate optimal rolling weights for each type of portfolio optimization
+Result <- 
+quarter_reb %>% map_df(~Roll_optimizer(return_mat, EOM_datevec = ., Amat = Amat, bvec = bvec, LookBack = 24))
+
+head(Result, 15)
+```
+
+    ## # A tibble: 15 × 7
+    ##    stocks             mv minvol maxdecor sharpe date       Look_Back_Period
+    ##    <chr>           <dbl>  <dbl>    <dbl>  <dbl> <date>                <dbl>
+    ##  1 ADXY Index     0.0100 0.4      0.4    0.0769 2002-03-29               24
+    ##  2 BCOMTR Index   0.0100 0.0239   0.0239 0.0769 2002-03-29               24
+    ##  3 DXY Index      0.01   0.230    0.230  0.0769 2002-03-29               24
+    ##  4 LEATTREU Index 0.0100 0.0100   0.0100 0.0769 2002-03-29               24
+    ##  5 LGAGTRUH Index 0.0100 0.143    0.143  0.0769 2002-03-29               24
+    ##  6 LGCPTRUH Index 0.0100 0.0100   0.0100 0.0769 2002-03-29               24
+    ##  7 LP05TREH Index 0.0100 0.0100   0.0100 0.0769 2002-03-29               24
+    ##  8 LUACTRUU Index 0.0100 0.0100   0.0100 0.0769 2002-03-29               24
+    ##  9 LUAGTRUU Index 0.0100 0.123    0.123  0.0769 2002-03-29               24
+    ## 10 MSCI_ACWI      0.400  0.0100   0.0100 0.0769 2002-03-29               24
+    ## 11 MSCI_Jap       0.0100 0.01     0.01   0.0769 2002-03-29               24
+    ## 12 MSCI_RE        0.100  0.0100   0.0100 0.0769 2002-03-29               24
+    ## 13 MSCI_USA       0.400  0.01     0.01   0.0769 2002-03-29               24
+    ## 14 ADXY Index     0.0100 0.4      0.4    0.0769 2002-06-28               24
+    ## 15 BCOMTR Index   0.0100 0.0239   0.0239 0.0769 2002-06-28               24

@@ -1,0 +1,140 @@
+---
+title: "Balance Portfolio"
+author: "Jonathan Rossouw"
+date: "4 December 2021"
+# date: "`r Sys.Date()`"
+bibliography: Tex/ref.bib       # Do not edit: Keep this naming convention and location.
+output:
+  pagedown::html_paged:
+    # template: wp_paged.html
+    # css: ['wp.css', 'wp-fonts.css', 'wp-page.css']
+    css: ["Template/default-fonts-Texevier.css", "Template/default-page-Texevier.css", "Template/default-Texevier.css"]
+    csl: Template/harvard-stellenbosch-university.csl # referencing format used.
+    template: ["Template/paged-Texevier.html"]
+
+    toc: true
+    # change to true for a self-contained document, but it'll be a litte slower for Pandoc to render
+    self_contained: TRUE
+abstract: |
+    This document contains the output for the Balance Global portfolio
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
+pacman::p_load(modelsummary, gt, knitr, kableExtra, tidyverse, kableExtra, lubridate)
+list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
+```
+
+\newpage
+
+# Introduction {-}
+
+A selection of Global Equity indices, Credit and Bond indices, and Currency is used to create a balance optimal portfolio. The constraints are given as:
+
+* Long-only strategy;
+* When using covariance and mean forecasts, use a look-back of less than 3 years;
+* Do not hold any assets with less than 3 years' returns data;
+* Apply Quarterly Rebalancing;
+* Limit exposure to Bonds and credit instruments at 25%;
+* Limit exposure to Equities at 60%;
+* Limit single asset exposure at 40%.
+
+The mean-variance, minimum volaility, maximum decorrelation, and sharpe ratios portfolio techniques are used.
+
+# Results
+
+The following is the top of the data frame containing all the weights for each rebalancing at the end of each quarter.
+
+
+```{r q6_1}
+# Load in Data
+MAA <- read_rds("data/MAA.rds") %>% select(-Name) %>% arrange(date) %>% rename(Tickers = Ticker)
+msci <- read_rds("data/msci.rds") %>%
+filter(Name %in% c("MSCI_ACWI", "MSCI_USA", "MSCI_RE", "MSCI_Jap")) %>% rename(Tickers = Name) %>% arrange(date)
+    
+# Combine Assets classes
+comb_assets <- rbind(MAA, msci) %>% arrange(date)
+comb_assets_3_years <- comb_assets %>% group_by(Tickers) %>% filter(date == as.Date("2018/01/01")) %>% pull(Tickers) %>% unique()
+    
+# Filter that all Tickers that have data for at least previous 3 years
+Start_Date <- comb_assets %>% 
+    filter(Tickers %in% comb_assets_3_years) %>% 
+    group_by(Tickers) %>% summarise(date = dplyr::first(date)) %>% summarise(latest = dplyr::first(date))
+
+# Get dates for Rebalancing
+EOM_datevec <- comb_assets %>% 
+    filter(Tickers %in% comb_assets_3_years) %>% 
+    filter(date >= Start_Date[[1]]) %>% select(date) %>% unique %>% mutate(YM = format(date, "%Y%B")) %>% group_by(YM) %>% filter(date == dplyr::last(date)) %>% ungroup() %>% pull(date) %>% unique
+
+# Quaterly Rebalancing dates
+quarter_reb <- rmsfuns::dateconverter(as.Date(EOM_datevec[1]), as.Date(EOM_datevec[238]), 
+    "weekdayEOQ") 
+
+# Filter data quaterly dates, determine returns
+comb_assets <- comb_assets %>% 
+    filter(Tickers %in% comb_assets_3_years) %>% 
+    filter(date >= Start_Date[[1]]) %>% 
+    filter(date %in% quarter_reb) %>% 
+    group_by(Tickers) %>% 
+    mutate(ret = Price/lag(Price) - 1) %>% 
+    filter(date > dplyr::first(date)) %>% 
+    select(-Price) %>%
+    spread(Tickers, ret)
+
+```
+
+```{r q6_2}
+# Impute missing values for return series
+options(scipen = 999)
+return_mat <- 
+  impute_missing_returns(comb_assets, impute_returns_method = "Drawn_Distribution_Collective", Seed = as.numeric(format( Sys.time(), "%Y%d%H%M")))
+
+# Create returns matrix
+return_mat_Nodate <- data.matrix(return_mat[, -1])
+```
+
+```{r q6_3}
+# Create constraints
+
+NStox <- ncol(return_mat_Nodate)
+LB = 0.01
+UB = 0.4
+Eq = 0.6 # Equity Upper Bound
+Bonds = 0.25 # Credit and Bonds Upper Bound
+meq = 1
+
+# Make A Mat 
+Eq_mat <- rbind(matrix(0, nrow = 9, ncol = 4),
+                -diag(4))
+
+C_B_mat <- rbind(matrix(0, 3, 6), 
+                 -diag(6),
+                 matrix(0, 4, 6))
+
+bvec <- c(1, rep(LB, NStox), -rep(UB, NStox), -rep(Eq, 4), -rep(Bonds, 6))
+Amat <- cbind(1, diag(NStox), -diag(NStox), Eq_mat, C_B_mat)
+
+```
+
+```{r q6_4}
+# Calculate optimal rolling weights for each type of portfolio optimization
+Result <- 
+quarter_reb %>% map_df(~Roll_optimizer(return_mat, EOM_datevec = ., Amat = Amat, bvec = bvec, LookBack = 24))
+
+head(Result, 15) %>% 
+    kable(., row.names = FALSE, digits = 3, label = "",
+      caption = 'Optimal Portfolio Weights',
+      format = "html", booktabs = T) %>%
+        kable_styling(full_width = T,
+                      latex_options = c("striped",
+                                        "scale_down",
+                                        "HOLD_position"),
+                      font_size = 13)
+
+```
+
+
+
+
+
